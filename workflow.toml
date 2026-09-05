@@ -1,0 +1,23 @@
+[[nodes]]
+name = "plan"
+agent = "claude"
+role = "planner"
+writes = "plan.md"
+
+[[nodes]]
+name = "critique"
+agent = "codex"
+role = "critic"
+writes = "critique.md"
+
+[[nodes]]
+name = "implement"
+agent = "codex"
+role = "implementer"
+writes = "implementation.md"
+
+[[nodes]]
+name = "review"
+agent = "claude"
+role = "reviewer"
+writes = "review.md"

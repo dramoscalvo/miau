@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"session-1"}
+{"type":"system","subtype":"thinking_tokens","estimated_tokens":50,"estimated_tokens_delta":50,"session_id":"session-1"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"A plan"}]}}
+{"type":"result","result":"A plan","session_id":"session-1","is_error":false}

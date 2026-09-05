@@ -1,0 +1,235 @@
+//! Context-sensitive help view.
+
+use crate::{
+    runs::domain::NodeStatus,
+    terminal::application::{
+        Action, Mode, PromptEditMode, PromptKind, prompt_cursor_position, prompt_rows,
+    },
+};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    style::{Color, Style, Stylize},
+    text::Line,
+    widgets::{Block, BorderType, Borders, Paragraph},
+};
+
+fn confirmation_text(action: &Action) -> &'static str {
+    match action {
+        Action::Quit => "kill running agent and quit? y/n",
+        Action::Stop => "stop running agent and keep miau open? y/n",
+    }
+}
+
+fn gate_text(
+    status: Option<NodeStatus>,
+    is_current: bool,
+    can_prompt: bool,
+    can_discuss: bool,
+) -> String {
+    let mut commands = Vec::new();
+    match status {
+        Some(NodeStatus::Pending) if is_current => {
+            if can_prompt {
+                commands.push("p prompt");
+            }
+            commands.push("s start");
+        }
+        Some(NodeStatus::Done | NodeStatus::Failed) if is_current => {
+            commands.push("a approve");
+            if can_prompt {
+                commands.push("p prompt");
+            }
+            commands.push("e edit");
+            if can_discuss {
+                commands.push("d discuss");
+            }
+        }
+        Some(NodeStatus::Done | NodeStatus::Failed) => {
+            if can_prompt {
+                commands.push("p prompt");
+            }
+            if can_discuss {
+                commands.push("d discuss");
+            }
+        }
+        Some(NodeStatus::Pending | NodeStatus::Running | NodeStatus::Skipped) => {}
+        None => commands.push("workflow complete"),
+    }
+    commands.extend(["←/→ agents", "b runs", "tab pane", "q quit"]);
+    commands.join(" · ")
+}
+
+pub struct HelpView<'a> {
+    pub mode: &'a Mode,
+    pub prompt_edit_mode: PromptEditMode,
+    pub status: Option<NodeStatus>,
+    pub is_current: bool,
+    pub can_prompt: bool,
+    pub can_discuss: bool,
+    pub error: Option<&'a str>,
+    pub prompt: &'a str,
+    pub prompt_cursor: usize,
+}
+
+pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
+    let HelpView {
+        mode,
+        prompt_edit_mode,
+        status,
+        is_current,
+        can_prompt,
+        can_discuss,
+        error,
+        prompt,
+        prompt_cursor,
+    } = view;
+    if let Mode::Prompt(kind) = mode {
+        let width = area.width.saturating_sub(2).max(1) as usize;
+        let (cursor_row, cursor_column) = prompt_cursor_position(prompt, prompt_cursor, width);
+        let visible_height = area.height.saturating_sub(2) as usize;
+        let scroll = cursor_row.saturating_sub(visible_height.saturating_sub(1));
+        let lines = prompt_rows(prompt, width)
+            .into_iter()
+            .map(Line::from)
+            .collect::<Vec<_>>();
+        let (title, instructions) = match (kind, prompt_edit_mode) {
+            (PromptKind::Initial, PromptEditMode::Normal) => (
+                " Initial prompt · NORMAL ",
+                " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x or diw/ciw/daw/caw edit · 0/^/$ gg/G · Enter save · Esc cancel ",
+            ),
+            (PromptKind::Revision, PromptEditMode::Normal) => (
+                " Revision prompt · NORMAL ",
+                " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x or diw/ciw/daw/caw edit · 0/^/$ gg/G · Enter send · Esc cancel ",
+            ),
+            (PromptKind::Initial, PromptEditMode::Insert) => (
+                " Initial prompt · INSERT ",
+                " type to edit · Backspace/Delete remove · Enter save · Esc normal ",
+            ),
+            (PromptKind::Revision, PromptEditMode::Insert) => (
+                " Revision prompt · INSERT ",
+                " type to edit · Backspace/Delete remove · Enter send · Esc normal ",
+            ),
+        };
+        frame.render_widget(
+            Paragraph::new(lines).scroll((scroll as u16, 0)).block(
+                Block::default()
+                    .title(title.bold().cyan())
+                    .title_bottom(instructions.dim())
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().cyan()),
+            ),
+            area,
+        );
+        if area.width >= 3 && area.height >= 3 {
+            frame.set_cursor_position((
+                area.x + 1 + cursor_column as u16,
+                area.y + 1 + cursor_row.saturating_sub(scroll) as u16,
+            ));
+        }
+        return;
+    }
+
+    let text = if let Some(error) = error {
+        format!("error: {error}")
+    } else {
+        match mode {
+            Mode::RunList => "enter open · n new · q quit".into(),
+            Mode::Streaming => "←/→ agents · tab pane · ↑↓ scroll · x stop · q quit".into(),
+            Mode::Gate => gate_text(status, is_current, can_prompt, can_discuss),
+            Mode::Prompt(_) => String::new(),
+            Mode::Confirm(action) => confirmation_text(action).into(),
+        }
+    };
+    frame.render_widget(
+        Paragraph::new(text).style(if error.is_some() {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        }),
+        area,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{confirmation_text, gate_text};
+    use crate::runs::domain::NodeStatus;
+    use crate::terminal::application::{Action, Mode, PromptEditMode, PromptKind, prompt_rows};
+    use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn prompt_editor_has_rounded_corners() {
+        let backend = TestBackend::new(40, 5);
+        let mut terminal = Terminal::new(backend).expect("test terminal should be created");
+        let mode = Mode::Prompt(PromptKind::Initial);
+
+        terminal
+            .draw(|frame| {
+                super::render(
+                    frame,
+                    frame.area(),
+                    super::HelpView {
+                        mode: &mode,
+                        prompt_edit_mode: PromptEditMode::Normal,
+                        status: None,
+                        is_current: false,
+                        can_prompt: false,
+                        can_discuss: false,
+                        error: None,
+                        prompt: "",
+                        prompt_cursor: 0,
+                    },
+                );
+            })
+            .expect("prompt editor should render");
+
+        assert_eq!(terminal.backend().buffer()[(0, 0)].symbol(), "╭");
+    }
+
+    #[test]
+    fn prompt_rows_respect_unicode_display_width() {
+        assert_eq!(prompt_rows("ab界", 3), vec!["ab", "界"]);
+    }
+
+    #[test]
+    fn stop_confirmation_explains_that_miau_stays_open() {
+        assert_eq!(
+            confirmation_text(&Action::Stop),
+            "stop running agent and keep miau open? y/n"
+        );
+    }
+
+    #[test]
+    fn pending_current_agent_advertises_prompt_before_start() {
+        assert_eq!(
+            gate_text(Some(NodeStatus::Pending), true, true, false),
+            "p prompt · s start · ←/→ agents · b runs · tab pane · q quit"
+        );
+    }
+
+    #[test]
+    fn completed_gate_advertises_only_decision_commands() {
+        assert_eq!(
+            gate_text(Some(NodeStatus::Done), true, true, true),
+            "a approve · p prompt · e edit · d discuss · ←/→ agents · b runs · tab pane · q quit"
+        );
+    }
+
+    #[test]
+    fn completed_historical_agent_advertises_follow_up_without_approval() {
+        assert_eq!(
+            gate_text(Some(NodeStatus::Done), false, true, true),
+            "p prompt · d discuss · ←/→ agents · b runs · tab pane · q quit"
+        );
+    }
+
+    #[test]
+    fn command_nodes_do_not_advertise_agent_prompting() {
+        assert_eq!(
+            gate_text(Some(NodeStatus::Done), false, false, false),
+            "←/→ agents · b runs · tab pane · q quit"
+        );
+    }
+}

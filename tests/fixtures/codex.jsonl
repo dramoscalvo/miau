@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"thread-1"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"type":"agent_message","text":"Critique"}}
+{"type":"turn.completed","result":"Critique","thread_id":"thread-1"}
