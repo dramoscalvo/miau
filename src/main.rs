@@ -114,6 +114,7 @@ async fn debug_run(
         writes: args.artifact.clone(),
         status: NodeStatus::Running,
         session_id: None,
+        session_group: None,
         duration: None,
         attempts: 1,
         command: None,
@@ -156,10 +157,11 @@ async fn debug_run(
                     .session_id = Some(id.clone());
             }
             EventKind::Done { text, session_id } => {
-                repository.write(&run.id, &args.artifact, text)?;
+                let artifact = repository.write_versioned(&run.id, &args.artifact, text)?;
                 let node = run
                     .current_mut()
                     .ok_or_else(|| anyhow!("debug run lost its node"))?;
+                node.writes = artifact;
                 node.status = NodeStatus::Done;
                 if session_id.is_some() {
                     node.session_id.clone_from(session_id);

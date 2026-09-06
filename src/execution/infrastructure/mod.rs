@@ -97,10 +97,14 @@ impl ConfiguredAdapter {
         })
     }
 
-    fn render(value: &str, req: &Request) -> String {
+    fn render(&self, value: &str, req: &Request) -> String {
         value
             .replace("{prompt}", &req.prompt)
             .replace("{session}", req.resume.as_deref().unwrap_or_default())
+            .replace(
+                "{effort}",
+                self.config.effort.as_deref().unwrap_or_default(),
+            )
             .replace(
                 "{schema}",
                 &req.schema
@@ -115,7 +119,7 @@ impl ConfiguredAdapter {
             .config
             .args
             .iter()
-            .map(|a| Self::render(a, req))
+            .map(|a| self.render(a, req))
             .collect();
         let prompt_at = output
             .iter()
@@ -126,12 +130,12 @@ impl ConfiguredAdapter {
                 .config
                 .schema_args
                 .iter()
-                .map(|a| Self::render(a, req))
+                .map(|a| self.render(a, req))
                 .collect::<Vec<_>>();
             output.splice(prompt_at..prompt_at, schema);
         }
         if req.resume.is_some() {
-            let resume = self.config.resume_args.iter().map(|a| Self::render(a, req));
+            let resume = self.config.resume_args.iter().map(|a| self.render(a, req));
             let at = self
                 .config
                 .resume_insert_at
@@ -319,6 +323,7 @@ mod tests {
         AgentConfig {
             bin: "codex".into(),
             args: vec!["exec".into(), "--json".into(), "{prompt}".into()],
+            effort: Some("medium".into()),
             resume_args: vec!["resume".into(), "{session}".into()],
             resume_insert_at: Some(1),
             schema_args: vec!["--output-schema".into(), "{schema}".into()],
@@ -347,6 +352,28 @@ mod tests {
                 "schema.json",
                 "continue"
             ]
+        );
+    }
+
+    #[test]
+    fn configured_effort_is_rendered_into_agent_arguments() {
+        let mut config = codex_config();
+        config
+            .args
+            .insert(2, "model_reasoning_effort=\"{effort}\"".into());
+        let adapter = ConfiguredAdapter::new("codex", config).unwrap();
+
+        let command = adapter.command(&Request {
+            prompt: "work".into(),
+            cwd: ".".into(),
+            resume: None,
+            schema: None,
+        });
+
+        assert!(
+            command
+                .args
+                .contains(&"model_reasoning_effort=\"medium\"".into())
         );
     }
 

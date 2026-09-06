@@ -115,6 +115,21 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
         Ok(())
     }
 
+    pub fn session_for_current<'a>(&self, run: &'a Run) -> Option<&'a str> {
+        let current = run.current()?;
+        current.session_id.as_deref().or_else(|| {
+            let group = current
+                .session_group
+                .as_deref()
+                .filter(|group| !group.is_empty())?;
+            run.nodes[..run.cursor].iter().rev().find_map(|node| {
+                (node.agent == current.agent && node.session_group.as_deref() == Some(group))
+                    .then_some(node.session_id.as_deref())
+                    .flatten()
+            })
+        })
+    }
+
     pub fn apply_event(
         &self,
         run: &mut Run,
@@ -127,7 +142,9 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
         match &event.kind {
             EventKind::SessionStarted { id } => node.session_id = Some(id.clone()),
             EventKind::Done { text, session_id } => {
-                self.repository.write(&run_id, &node.writes, text)?;
+                node.writes = self
+                    .repository
+                    .write_versioned(&run_id, &node.writes, text)?;
                 node.status = NodeStatus::Done;
                 node.duration = Some(elapsed);
                 if session_id.is_some() {
@@ -309,6 +326,7 @@ mod tests {
                     writes: "plan.md".into(),
                     status: NodeStatus::Done,
                     session_id: None,
+                    session_group: None,
                     duration: None,
                     attempts: 1,
                     command: None,
@@ -321,6 +339,7 @@ mod tests {
                     writes: "critique.md".into(),
                     status: NodeStatus::Pending,
                     session_id: None,
+                    session_group: None,
                     duration: None,
                     attempts: 0,
                     command: None,
@@ -341,6 +360,71 @@ mod tests {
             .unwrap();
         assert!(prompt.contains("edited on disk"));
         assert!(prompt.contains("focus on data"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn current_node_reuses_the_latest_session_in_its_group() {
+        let root = std::env::temp_dir().join(format!("miau-session-{}", std::process::id()));
+        let repo = FileRepository::new(root.join("runs"));
+        let mut run = fixture(&root);
+        run.nodes[0].agent = "codex".into();
+        run.nodes[0].session_group = Some("delivery".into());
+        run.nodes[0].session_id = Some("thread-1".into());
+        run.nodes[1].session_group = Some("delivery".into());
+
+        let session = Orchestrator::new(repo, root.join("roles")).session_for_current(&run);
+
+        assert_eq!(session, Some("thread-1"));
+    }
+
+    #[test]
+    fn current_node_does_not_reuse_a_group_from_another_agent() {
+        let root = std::env::temp_dir().join(format!("miau-session-agent-{}", std::process::id()));
+        let repo = FileRepository::new(root.join("runs"));
+        let mut run = fixture(&root);
+        run.nodes[0].session_group = Some("delivery".into());
+        run.nodes[0].session_id = Some("session-1".into());
+        run.nodes[1].session_group = Some("delivery".into());
+
+        let session = Orchestrator::new(repo, root.join("roles")).session_for_current(&run);
+
+        assert_eq!(session, None);
+    }
+
+    #[test]
+    fn completed_rerun_versions_the_artifact_and_keeps_the_previous_result() {
+        let root = std::env::temp_dir().join(format!("miau-versioned-{}", std::process::id()));
+        let repo = FileRepository::new(root.join("runs"));
+        repo.write("001", "plan.md", "first plan").unwrap();
+        let mut run = fixture(&root);
+        run.cursor = 0;
+        run.nodes[0].status = NodeStatus::Running;
+        run.nodes[0].attempts = 2;
+        let orchestrator = Orchestrator::new(repo, root.join("roles"));
+
+        orchestrator
+            .apply_event(
+                &mut run,
+                &Event::now(
+                    "claude",
+                    EventKind::Done {
+                        text: "second plan".into(),
+                        session_id: None,
+                    },
+                ),
+                Duration::from_secs(1),
+            )
+            .unwrap();
+
+        assert_eq!(
+            (
+                orchestrator.repository().read("001", "plan.md").unwrap(),
+                orchestrator.repository().read("001", "plan_v2.md").unwrap(),
+                run.nodes[0].writes.as_str(),
+            ),
+            ("first plan".into(), "second plan".into(), "plan_v2.md")
+        );
         let _ = fs::remove_dir_all(root);
     }
 
@@ -375,6 +459,7 @@ mod tests {
             writes: "implementation.md".into(),
             status: NodeStatus::Pending,
             session_id: None,
+            session_group: None,
             duration: None,
             attempts: 0,
             command: None,

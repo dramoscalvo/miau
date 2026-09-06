@@ -1,13 +1,15 @@
 [claude]
 bin = "claude"
-args = ["--model", "opus", "--effort", "high", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
+effort = "high"
+args = ["--model", "opus", "--effort", "{effort}", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
 resume_args = ["--resume", "{session}"]
 discuss_args = ["--resume", "{session}"]
 parser = "claude"
 
 [codex]
 bin = "codex"
-args = ["exec", "--json", "--model", "gpt-5.6-sol", "-c", "model_reasoning_effort=\"medium\"", "{prompt}"]
+effort = "medium"
+args = ["exec", "--json", "--model", "gpt-5.6-sol", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"]
 resume_args = ["resume", "{session}"]
 resume_insert_at = 1
 schema_args = ["--output-schema", "{schema}"]

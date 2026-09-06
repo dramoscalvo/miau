@@ -19,6 +19,12 @@ use case. Prompt assembly reads role/spec/artifact content through repository
 ports. Severity in critique/review output is presentation data only; it must
 never control a transition.
 
+Workflow nodes may opt into a named session group. At process start, the
+orchestrator selects only the newest captured session from an earlier node with
+the same group and configured agent. The session ID remains part of persisted
+run state; the execution layer only receives the resolved opaque ID and renders
+the provider-specific resume arguments.
+
 `terminal` is a driving adapter rather than a business domain. Its application
 layer contains the pure `Model`, `Message`, and `Model::update` state machine.
 Its infrastructure layer owns EventStream input, ratatui rendering, terminal
@@ -60,6 +66,7 @@ default configuration.
 
 The filesystem repository is the source of truth. Writes to `state.json` use a
 temporary file and rename. Artifact edits are read again from disk after an
-editor handoff. Snapshots use the next unused numbered suffix and are never
-overwritten. A stale `Running` node loaded after a reboot becomes a visible
-failure requiring a human decision.
+editor handoff. Agent artifact writes use the next unused `_vN` filename and
+never overwrite an existing result. Snapshots use the next unused numbered
+suffix and are never overwritten. A stale `Running` node loaded after a reboot
+becomes a visible failure requiring a human decision.

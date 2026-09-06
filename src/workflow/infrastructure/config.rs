@@ -175,4 +175,23 @@ mod tests {
 
         fs::remove_dir_all(directory).unwrap();
     }
+
+    #[test]
+    fn embedded_workflow_reuses_the_codex_delivery_session() {
+        let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
+        let groups: Vec<_> = workflow
+            .nodes
+            .iter()
+            .filter_map(|node| {
+                node.session_group
+                    .as_deref()
+                    .map(|group| (node.name.as_str(), group))
+            })
+            .collect();
+
+        assert_eq!(
+            groups,
+            [("critique", "delivery"), ("implement", "delivery")]
+        );
+    }
 }

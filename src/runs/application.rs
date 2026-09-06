@@ -25,6 +25,8 @@ pub enum RepositoryError {
     },
     #[error("artifact path escapes its run directory: {0}")]
     UnsafeArtifact(String),
+    #[error("artifact version namespace exhausted for {0}")]
+    ArtifactVersionsExhausted(String),
 }
 
 pub trait RunRepository {
@@ -36,6 +38,12 @@ pub trait RunRepository {
 pub trait ArtifactRepository {
     fn read(&self, run_id: &str, name: &str) -> Result<String, RepositoryError>;
     fn write(&self, run_id: &str, name: &str, text: &str) -> Result<(), RepositoryError>;
+    fn write_versioned(
+        &self,
+        run_id: &str,
+        name: &str,
+        text: &str,
+    ) -> Result<String, RepositoryError>;
     fn snapshot(&self, run_id: &str, name: &str) -> Result<Option<PathBuf>, RepositoryError>;
     fn path(&self, run_id: &str, name: &str) -> Result<PathBuf, RepositoryError>;
 }

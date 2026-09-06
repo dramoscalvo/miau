@@ -3,6 +3,15 @@ name = "miau"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+asdf = []
+
+[[bin]]
+name = "asdf"
+path = "src/bin/asdf.rs"
+required-features = ["asdf"]
+
 [dependencies]
 anyhow = "=1.0.104"
 chrono = { version = "=0.4.45", features = ["serde"] }

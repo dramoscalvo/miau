@@ -32,6 +32,8 @@ pub struct Node {
     pub writes: String,
     pub status: NodeStatus,
     pub session_id: Option<String>,
+    #[serde(default)]
+    pub session_group: Option<String>,
     pub duration: Option<Duration>,
     pub attempts: u32,
     #[serde(default)]
@@ -101,5 +103,24 @@ mod tests {
     fn channel_summary_truncates_unicode_safely() {
         let entry = ChannelEntry::new("you", None, "á".repeat(61));
         assert_eq!(entry.summary.chars().count(), 60);
+    }
+
+    #[test]
+    fn node_without_session_group_remains_deserializable() {
+        let node: Node = serde_json::from_str(
+            r#"{
+                "name":"plan",
+                "agent":"claude",
+                "role":"planner",
+                "writes":"plan.md",
+                "status":"Pending",
+                "session_id":null,
+                "duration":null,
+                "attempts":0
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(node.session_group, None);
     }
 }

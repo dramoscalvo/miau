@@ -9,10 +9,28 @@ use crate::{
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Style, Stylize},
-    text::Line,
+    style::{Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
 };
+
+fn hint_line(text: &str) -> Line<'static> {
+    let mut spans = Vec::new();
+    for (index, hint) in text.trim().split(" · ").enumerate() {
+        if index > 0 {
+            spans.push(Span::from(" · ").dark_gray());
+        }
+        if let Some((key, description)) = hint.split_once(' ') {
+            spans.extend([
+                Span::from(key.to_owned()).cyan().bold(),
+                Span::from(format!(" {description}")).dark_gray(),
+            ]);
+        } else {
+            spans.push(Span::from(hint.to_owned()).dark_gray());
+        }
+    }
+    Line::from(spans)
+}
 
 fn confirmation_text(action: &Action) -> &'static str {
     match action {
@@ -96,11 +114,11 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         let (title, instructions) = match (kind, prompt_edit_mode) {
             (PromptKind::Initial, PromptEditMode::Normal) => (
                 " Initial prompt · NORMAL ",
-                " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x or diw/ciw/daw/caw edit · 0/^/$ gg/G · Enter save · Esc cancel ",
+                " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x dd/D delete · yy/Y yank · p paste · text objects · 0/^/$ gg/G · Enter save · Esc cancel ",
             ),
             (PromptKind::Revision, PromptEditMode::Normal) => (
                 " Revision prompt · NORMAL ",
-                " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x or diw/ciw/daw/caw edit · 0/^/$ gg/G · Enter send · Esc cancel ",
+                " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x dd/D delete · yy/Y yank · p paste · text objects · 0/^/$ gg/G · Enter send · Esc cancel ",
             ),
             (PromptKind::Initial, PromptEditMode::Insert) => (
                 " Initial prompt · INSERT ",
@@ -115,7 +133,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
             Paragraph::new(lines).scroll((scroll as u16, 0)).block(
                 Block::default()
                     .title(title.bold().cyan())
-                    .title_bottom(instructions.dim())
+                    .title_bottom(hint_line(instructions))
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
                     .border_style(Style::default().cyan()),
@@ -132,24 +150,18 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
     }
 
     let text = if let Some(error) = error {
-        format!("error: {error}")
+        Line::from(format!("error: {error}").red().bold())
     } else {
-        match mode {
+        let hints = match mode {
             Mode::RunList => "enter open · n new · q quit".into(),
             Mode::Streaming => "←/→ agents · tab pane · ↑↓ scroll · x stop · q quit".into(),
             Mode::Gate => gate_text(status, is_current, can_prompt, can_discuss),
             Mode::Prompt(_) => String::new(),
             Mode::Confirm(action) => confirmation_text(action).into(),
-        }
+        };
+        hint_line(&hints)
     };
-    frame.render_widget(
-        Paragraph::new(text).style(if error.is_some() {
-            Style::default().fg(Color::Red)
-        } else {
-            Style::default().fg(Color::DarkGray)
-        }),
-        area,
-    );
+    frame.render_widget(Paragraph::new(text), area);
 }
 
 #[cfg(test)]
@@ -157,7 +169,7 @@ mod tests {
     use super::{confirmation_text, gate_text};
     use crate::runs::domain::NodeStatus;
     use crate::terminal::application::{Action, Mode, PromptEditMode, PromptKind, prompt_rows};
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
 
     #[test]
     fn prompt_editor_has_rounded_corners() {
@@ -230,6 +242,38 @@ mod tests {
         assert_eq!(
             gate_text(Some(NodeStatus::Done), false, false, false),
             "←/→ agents · b runs · tab pane · q quit"
+        );
+    }
+
+    #[test]
+    fn help_visually_separates_keys_from_descriptions() {
+        let mut terminal = Terminal::new(TestBackend::new(40, 1)).unwrap();
+        let mode = Mode::RunList;
+
+        terminal
+            .draw(|frame| {
+                super::render(
+                    frame,
+                    frame.area(),
+                    super::HelpView {
+                        mode: &mode,
+                        prompt_edit_mode: PromptEditMode::Normal,
+                        status: None,
+                        is_current: false,
+                        can_prompt: false,
+                        can_discuss: false,
+                        error: None,
+                        prompt: "",
+                        prompt_cursor: 0,
+                    },
+                );
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        assert_eq!(
+            (buffer[(0, 0)].fg, buffer[(6, 0)].fg),
+            (Color::Cyan, Color::DarkGray)
         );
     }
 }

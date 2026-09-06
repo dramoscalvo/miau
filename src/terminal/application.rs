@@ -33,6 +33,7 @@ pub enum PromptWordStyle {
 pub enum PromptOperator {
     Delete,
     Change,
+    Yank,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +57,12 @@ enum PromptWordClass {
     Whitespace,
     Keyword,
     Punctuation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PromptRegister {
+    Characterwise(String),
+    Linewise(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +105,7 @@ pub struct Model {
     prompt_cursor: usize,
     prompt_preferred_column: Option<usize>,
     prompt_pending_command: Option<PromptPendingCommand>,
+    prompt_register: Option<PromptRegister>,
     pub pending_prompt: Option<String>,
     pub error: Option<String>,
     pub spinner: usize,
@@ -117,6 +125,7 @@ impl Default for Model {
             prompt_cursor: 0,
             prompt_preferred_column: None,
             prompt_pending_command: None,
+            prompt_register: None,
             pending_prompt: None,
             error: None,
             spinner: 0,
@@ -146,6 +155,11 @@ pub enum Message {
     Input(char),
     Backspace,
     DeletePromptCharacter,
+    DeletePromptToLineEnd,
+    EditPromptLine {
+        operator: PromptOperator,
+    },
+    PastePromptAfter,
     MovePromptLeft,
     MovePromptRight,
     MovePromptToStart,
@@ -243,6 +257,7 @@ impl Model {
         self.prompt_cursor = 0;
         self.prompt_preferred_column = None;
         self.prompt_pending_command = None;
+        self.prompt_register = None;
         self.pending_prompt = None;
         self.error = None;
     }
@@ -354,6 +369,9 @@ impl Model {
             }
             Message::Backspace => {}
             Message::DeletePromptCharacter => self.delete_prompt_character(),
+            Message::DeletePromptToLineEnd => self.delete_prompt_to_line_end(),
+            Message::EditPromptLine { operator } => self.edit_prompt_line(operator),
+            Message::PastePromptAfter => self.paste_prompt_after(),
             Message::MovePromptLeft => self.move_prompt_left(),
             Message::MovePromptRight => self.move_prompt_right(),
             Message::MovePromptToStart => {
@@ -423,7 +441,91 @@ impl Model {
     fn delete_prompt_character(&mut self) {
         if let Some(character) = self.prompt[self.prompt_cursor..].chars().next() {
             let end = self.prompt_cursor + character.len_utf8();
+            self.prompt_register = Some(PromptRegister::Characterwise(
+                self.prompt[self.prompt_cursor..end].to_owned(),
+            ));
             self.prompt.drain(self.prompt_cursor..end);
+        }
+        self.prompt_preferred_column = None;
+    }
+
+    fn delete_prompt_to_line_end(&mut self) {
+        let line_end = self.prompt[self.prompt_cursor..]
+            .find('\n')
+            .map_or(self.prompt.len(), |index| self.prompt_cursor + index);
+        if self.prompt_cursor < line_end {
+            self.prompt_register = Some(PromptRegister::Characterwise(
+                self.prompt[self.prompt_cursor..line_end].to_owned(),
+            ));
+            self.prompt.drain(self.prompt_cursor..line_end);
+        }
+        self.prompt_preferred_column = None;
+    }
+
+    fn edit_prompt_line(&mut self, operator: PromptOperator) {
+        let line_start = self.prompt[..self.prompt_cursor]
+            .rfind('\n')
+            .map_or(0, |index| index + 1);
+        let line_end = self.prompt[self.prompt_cursor..]
+            .find('\n')
+            .map_or(self.prompt.len(), |index| self.prompt_cursor + index);
+        self.prompt_register = Some(PromptRegister::Linewise(
+            self.prompt[line_start..line_end].to_owned(),
+        ));
+
+        if operator == PromptOperator::Delete {
+            if line_end < self.prompt.len() {
+                self.prompt.drain(line_start..=line_end);
+                self.prompt_cursor = line_start.min(self.prompt.len());
+            } else if line_start > 0 {
+                self.prompt.drain(line_start - 1..line_end);
+                self.prompt_cursor = self.prompt[..line_start - 1]
+                    .rfind('\n')
+                    .map_or(0, |index| index + 1);
+            } else {
+                self.prompt.clear();
+                self.prompt_cursor = 0;
+            }
+        }
+        self.prompt_preferred_column = None;
+    }
+
+    fn paste_prompt_after(&mut self) {
+        let Some(register) = self.prompt_register.clone() else {
+            return;
+        };
+        match register {
+            PromptRegister::Characterwise(text) => {
+                let insertion = self.prompt[self.prompt_cursor..]
+                    .chars()
+                    .next()
+                    .map_or(self.prompt_cursor, |character| {
+                        self.prompt_cursor + character.len_utf8()
+                    });
+                self.prompt.insert_str(insertion, &text);
+                self.prompt_cursor = insertion
+                    + text
+                        .char_indices()
+                        .next_back()
+                        .map_or(0, |(index, _)| index);
+            }
+            PromptRegister::Linewise(line) => {
+                let line_end = self.prompt[self.prompt_cursor..]
+                    .find('\n')
+                    .map_or(self.prompt.len(), |index| self.prompt_cursor + index);
+                if line_end < self.prompt.len() {
+                    let insertion = line_end + 1;
+                    self.prompt.insert_str(insertion, &format!("{line}\n"));
+                    self.prompt_cursor = insertion;
+                } else if self.prompt.is_empty() {
+                    self.prompt.push_str(&line);
+                    self.prompt_cursor = 0;
+                } else {
+                    self.prompt.push('\n');
+                    self.prompt_cursor = self.prompt.len();
+                    self.prompt.push_str(&line);
+                }
+            }
         }
         self.prompt_preferred_column = None;
     }
@@ -558,8 +660,13 @@ impl Model {
         if let Some(range) =
             prompt_word_text_object_range(&self.prompt, self.prompt_cursor, text_object, style)
         {
-            self.prompt_cursor = range.start;
-            self.prompt.drain(range);
+            self.prompt_register = Some(PromptRegister::Characterwise(
+                self.prompt[range.clone()].to_owned(),
+            ));
+            if operator != PromptOperator::Yank {
+                self.prompt_cursor = range.start;
+                self.prompt.drain(range);
+            }
         }
         if operator == PromptOperator::Change {
             self.prompt_edit_mode = PromptEditMode::Insert;

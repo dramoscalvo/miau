@@ -1,10 +1,11 @@
 //! Run flow and artifact views.
 
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use super::pane;
 use crate::{
-    runs::domain::{NodeStatus, Run},
+    execution::application::AgentConfig,
+    runs::domain::{Node, NodeStatus, Run},
     terminal::application::Focus,
 };
 use chrono::{DateTime, Utc};
@@ -106,6 +107,27 @@ fn completed_nodes(run: &Run) -> usize {
         .count()
 }
 
+fn node_agent_label(node: &Node, agents: &HashMap<String, AgentConfig>) -> String {
+    match agents.get(&node.agent).and_then(AgentConfig::effort) {
+        Some(effort) => format!("{} · {} · {effort} effort", node.name, node.agent),
+        None => format!("{} · {}", node.name, node.agent),
+    }
+}
+
+fn node_status_style(status: NodeStatus) -> Style {
+    match status {
+        NodeStatus::Pending => Style::default().dim(),
+        NodeStatus::Running => Style::default().cyan(),
+        NodeStatus::Done => Style::default().yellow(),
+        NodeStatus::Failed => Style::default().red().bold(),
+        NodeStatus::Skipped => Style::default().dark_gray(),
+    }
+}
+
+fn field_line(label: &'static str, value: String) -> Line<'static> {
+    Line::from(vec![label.cyan().bold(), value.into()])
+}
+
 fn last_activity_at(run: &Run) -> DateTime<Utc> {
     run.channel
         .iter()
@@ -134,6 +156,7 @@ pub fn render_runs(
     selected: usize,
     focus: Focus,
     now: DateTime<Utc>,
+    agents: &HashMap<String, AgentConfig>,
 ) {
     if runs.is_empty() {
         frame.render_widget(
@@ -152,25 +175,27 @@ pub fn render_runs(
             let status = RunStatus::for_run(run);
             let current = run.current().map_or_else(
                 || "workflow complete".into(),
-                |node| format!("{} · {}", node.name, node.agent),
+                |node| node_agent_label(node, agents),
             );
             let heading = Line::from(vec![
                 Span::styled(format!("{} ", status.marker()), status.style()),
                 Span::styled(format!("{}  ", status.label()), status.style()),
-                Span::raw(format!("{}  {}  ", run.id, project_name(&run.project))),
+                Span::from(format!("{}  ", run.id)).cyan().bold(),
+                Span::from(format!("{}  ", project_name(&run.project))).magenta(),
             ]);
             let detail = Line::from(vec![
                 Span::raw("  "),
                 Span::styled(current, Style::default().bold()),
-                Span::raw(format!(
+                Span::from(format!(
                     "  {}/{} · {}",
                     completed_nodes(run),
                     run.nodes.len(),
                     relative_age(last_activity_at(run), now)
-                )),
+                ))
+                .dark_gray(),
             ]);
             ListItem::new(vec![heading, detail]).style(if index == selected {
-                Style::default().cyan().bold().reversed()
+                Style::default().on_dark_gray().bold()
             } else {
                 Style::default()
             })
@@ -196,7 +221,12 @@ fn next_action(run: &Run) -> String {
     }
 }
 
-pub fn render_run_summary(frame: &mut Frame<'_>, area: Rect, run: Option<&Run>) {
+pub fn render_run_summary(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    run: Option<&Run>,
+    agents: &HashMap<String, AgentConfig>,
+) {
     let Some(run) = run else {
         frame.render_widget(
             Paragraph::new("Select a run to inspect it")
@@ -211,43 +241,51 @@ pub fn render_run_summary(frame: &mut Frame<'_>, area: Rect, run: Option<&Run>) 
     let mut lines = vec![
         Line::from(Span::styled(status.label(), status.style())),
         Line::default(),
-        Line::from(format!("Run {} · {}", run.id, project_name(&run.project))),
+        field_line(
+            "Run ",
+            format!("{} · {}", run.id, project_name(&run.project)),
+        ),
     ];
     if let Some(node) = run.current() {
-        lines.push(Line::from(format!(
-            "Current: {} · {}",
-            node.name, node.agent
-        )));
+        lines.push(field_line("Current: ", node_agent_label(node, agents)));
     }
-    lines.push(Line::from(format!(
-        "Progress: {}/{} complete",
-        completed_nodes(run),
-        run.nodes.len()
-    )));
+    lines.push(field_line(
+        "Progress: ",
+        format!("{}/{} complete", completed_nodes(run), run.nodes.len()),
+    ));
     if let Some(node) = run.current() {
         let duration = node
             .duration
             .map(|duration| format!(" · Duration: {:.1}s", duration.as_secs_f64()))
             .unwrap_or_default();
-        lines.push(Line::from(format!("Attempts: {}{duration}", node.attempts)));
+        lines.push(field_line(
+            "Attempts: ",
+            format!("{}{duration}", node.attempts),
+        ));
     }
     lines.extend([
         Line::default(),
-        Line::from(Span::styled(
-            format!("Next: {}", next_action(run)),
-            Style::default().bold(),
-        )),
+        Line::from(vec![
+            "Next: ".cyan().bold(),
+            Span::from(next_action(run)).yellow().bold(),
+        ]),
     ]);
 
     if !run.channel.is_empty() {
-        lines.extend([Line::default(), Line::from("Latest activity".bold())]);
+        lines.extend([
+            Line::default(),
+            Line::from("Latest activity".magenta().bold()),
+        ]);
         for entry in run.channel.iter().rev().take(2).rev() {
             let route = entry
                 .to
                 .as_ref()
                 .map_or_else(|| entry.from.clone(), |to| format!("{} → {to}", entry.from));
-            lines.push(Line::from(format!("{} {route}", entry.at.format("%H:%M"))));
-            lines.push(Line::from(entry.summary.as_str()).dim());
+            lines.push(Line::from(vec![
+                Span::from(format!("{} ", entry.at.format("%H:%M"))).dark_gray(),
+                Span::from(route).cyan().bold(),
+            ]));
+            lines.push(Line::from(entry.summary.as_str()).gray());
         }
     }
 
@@ -291,23 +329,24 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
                 .iter()
                 .enumerate()
                 .map(|(i, n)| {
-                    let marker = if i == r.cursor { ">" } else { " " };
+                    let marker = if i == r.cursor {
+                        Span::from("> ").yellow().bold()
+                    } else {
+                        Span::from("  ").dim()
+                    };
                     let duration = n
                         .duration
                         .map(|d| format!(" {:.1}s", d.as_secs_f64()))
                         .unwrap_or_default();
-                    ListItem::new(format!(
-                        "{marker} {:<12} {:<8} {}{duration}",
-                        n.name,
-                        n.agent,
-                        node_status_label(n.status)
-                    ))
+                    ListItem::new(Line::from(vec![
+                        marker,
+                        Span::from(format!("{:<12} ", n.name)).bold(),
+                        Span::from(format!("{:<8} ", n.agent)).magenta(),
+                        Span::styled(node_status_label(n.status), node_status_style(n.status)),
+                        Span::from(duration).dark_gray(),
+                    ]))
                     .style(if i == viewed_node {
-                        Style::default().cyan().bold().reversed()
-                    } else if i == r.cursor {
-                        Style::default().yellow()
-                    } else if n.status == NodeStatus::Failed {
-                        Style::default().red()
+                        Style::default().on_dark_gray()
                     } else {
                         Style::default()
                     })
@@ -364,12 +403,14 @@ mod tests {
         streaming_scroll,
     };
     use crate::{
+        execution::application::AgentConfig,
         runs::domain::{ChannelEntry, Node, NodeStatus, Run},
         terminal::application::Focus,
     };
     use chrono::{TimeZone, Utc};
-    use ratatui::layout::Rect;
     use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{layout::Rect, style::Color};
+    use std::collections::HashMap;
 
     fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
         terminal
@@ -394,6 +435,7 @@ mod tests {
                     writes: "plan.md".into(),
                     status: NodeStatus::Done,
                     session_id: None,
+                    session_group: None,
                     duration: Some(std::time::Duration::from_secs(8)),
                     attempts: 1,
                     command: None,
@@ -406,6 +448,7 @@ mod tests {
                     writes: "review.md".into(),
                     status,
                     session_id: None,
+                    session_group: None,
                     duration: Some(std::time::Duration::from_secs(38)),
                     attempts: 2,
                     command: None,
@@ -423,15 +466,32 @@ mod tests {
         }
     }
 
+    fn agent_configs() -> HashMap<String, AgentConfig> {
+        HashMap::from([(
+            "codex".into(),
+            AgentConfig {
+                bin: "codex".into(),
+                args: vec![],
+                effort: Some("medium".into()),
+                resume_args: vec![],
+                resume_insert_at: None,
+                schema_args: vec![],
+                discuss_args: vec![],
+                parser: "codex".into(),
+            },
+        )])
+    }
+
     #[test]
     fn run_list_row_surfaces_status_project_step_progress_and_age() {
         let mut terminal = Terminal::new(TestBackend::new(53, 5)).unwrap();
         let runs = [run_with_status(NodeStatus::Failed)];
         let now = Utc.with_ymd_and_hms(2026, 9, 4, 11, 0, 0).unwrap();
+        let agents = agent_configs();
 
         terminal
             .draw(|frame| {
-                render_runs(frame, frame.area(), &runs, 0, Focus::Flow, now);
+                render_runs(frame, frame.area(), &runs, 0, Focus::Flow, now, &agents);
             })
             .unwrap();
 
@@ -442,7 +502,7 @@ mod tests {
                 "Needs attention",
                 "014",
                 "miau",
-                "review · codex",
+                "review · codex · medium effort",
                 "1/2",
                 "12m ago",
             ]
@@ -454,11 +514,12 @@ mod tests {
 
     #[test]
     fn selected_run_summary_explains_failure_and_latest_activity() {
-        let mut terminal = Terminal::new(TestBackend::new(38, 18)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(46, 18)).unwrap();
         let run = run_with_status(NodeStatus::Failed);
+        let agents = agent_configs();
 
         terminal
-            .draw(|frame| render_run_summary(frame, frame.area(), Some(&run)))
+            .draw(|frame| render_run_summary(frame, frame.area(), Some(&run), &agents))
             .unwrap();
 
         let text = buffer_text(&terminal);
@@ -466,7 +527,7 @@ mod tests {
             [
                 "Needs attention",
                 "Run 014 · miau",
-                "Current: review · codex",
+                "Current: review · codex · medium effort",
                 "Progress: 1/2 complete",
                 "Attempts: 2 · Duration: 38.0s",
                 "Next: Resolve review failure",
@@ -482,10 +543,19 @@ mod tests {
     #[test]
     fn empty_run_list_invites_the_user_to_create_a_run() {
         let mut terminal = Terminal::new(TestBackend::new(60, 5)).unwrap();
+        let agents = HashMap::new();
 
         terminal
             .draw(|frame| {
-                render_runs(frame, frame.area(), &[], 0, Focus::Flow, Utc::now());
+                render_runs(
+                    frame,
+                    frame.area(),
+                    &[],
+                    0,
+                    Focus::Flow,
+                    Utc::now(),
+                    &agents,
+                );
             })
             .unwrap();
 
@@ -559,6 +629,7 @@ mod tests {
                     writes: format!("node{index}.md"),
                     status: NodeStatus::Done,
                     session_id: None,
+                    session_group: None,
                     duration: None,
                     attempts: 1,
                     command: None,
@@ -597,5 +668,36 @@ mod tests {
             }
         }
         assert!(visible_flow.contains("node9"));
+    }
+
+    #[test]
+    fn flow_rows_visually_separate_agent_status_and_metadata() {
+        let run = run_with_status(NodeStatus::Done);
+        let mut terminal = Terminal::new(TestBackend::new(50, 15)).unwrap();
+
+        terminal
+            .draw(|frame| {
+                render(
+                    frame,
+                    frame.area(),
+                    FlowView {
+                        run: Some(&run),
+                        viewed_node: 0,
+                        artifact: "",
+                        stream: &[],
+                        scroll: 0,
+                        focus: Focus::Channel,
+                        spinner: 0,
+                        activity: "",
+                    },
+                );
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        assert_eq!(
+            (buffer[(16, 2)].fg, buffer[(25, 2)].fg, buffer[(40, 2)].fg),
+            (Color::Magenta, Color::Yellow, Color::DarkGray)
+        );
     }
 }

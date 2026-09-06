@@ -13,6 +13,8 @@ pub struct WorkflowNode {
     #[serde(default)]
     pub agent: Option<String>,
     #[serde(default)]
+    pub session_group: Option<String>,
+    #[serde(default)]
     pub role: Option<String>,
     #[serde(default)]
     pub writes: Option<String>,

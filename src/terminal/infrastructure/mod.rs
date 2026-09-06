@@ -90,6 +90,14 @@ fn handle_normal_prompt_key(ui: &mut Model, code: KeyCode, prompt_width: usize) 
             (PromptPendingCommand::Goto, KeyCode::Char('g')) => {
                 ui.update(Message::MovePromptToStart);
             }
+            (PromptPendingCommand::Operator(PromptOperator::Delete), KeyCode::Char('d')) => ui
+                .update(Message::EditPromptLine {
+                    operator: PromptOperator::Delete,
+                }),
+            (PromptPendingCommand::Operator(PromptOperator::Yank), KeyCode::Char('y')) => ui
+                .update(Message::EditPromptLine {
+                    operator: PromptOperator::Yank,
+                }),
             (PromptPendingCommand::Operator(operator), KeyCode::Char('i')) => {
                 ui.begin_prompt_text_object(operator, PromptTextObject::Inner);
             }
@@ -173,7 +181,13 @@ fn handle_normal_prompt_key(ui: &mut Model, code: KeyCode, prompt_width: usize) 
         KeyCode::Char('g') => ui.begin_prompt_g_prefix(),
         KeyCode::Char('G') => ui.update(Message::MovePromptToEnd),
         KeyCode::Char('d') => ui.begin_prompt_operator(PromptOperator::Delete),
+        KeyCode::Char('D') => ui.update(Message::DeletePromptToLineEnd),
         KeyCode::Char('c') => ui.begin_prompt_operator(PromptOperator::Change),
+        KeyCode::Char('y') => ui.begin_prompt_operator(PromptOperator::Yank),
+        KeyCode::Char('Y') => ui.update(Message::EditPromptLine {
+            operator: PromptOperator::Yank,
+        }),
+        KeyCode::Char('p') => ui.update(Message::PastePromptAfter),
         _ => {}
     }
 }
@@ -230,6 +244,7 @@ impl App {
                 writes: n.writes.clone().unwrap_or_else(|| format!("{}.md", n.name)),
                 status: NodeStatus::Pending,
                 session_id: None,
+                session_group: n.session_group.clone(),
                 duration: None,
                 attempts: 0,
                 command: n.command.clone(),
@@ -335,6 +350,10 @@ impl App {
             run.cursor += 1;
             self.repository.save(run)?;
         };
+        let resume = self
+            .orchestrator
+            .session_for_current(run)
+            .map(str::to_owned);
         self.orchestrator.begin(run)?;
         self.ui.viewed_node = run.cursor;
         let request = Request {
@@ -345,11 +364,7 @@ impl App {
                 String::new()
             },
             cwd: run.project.clone(),
-            resume: if node.attempts > 0 {
-                node.session_id.clone()
-            } else {
-                None
-            },
+            resume,
             schema: None,
         };
         let raw_log = self
@@ -736,8 +751,14 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
             app.ui.selected,
             app.ui.focus,
             Utc::now(),
+            &app.agents,
         );
-        flow::render_run_summary(frame, areas.channel, app.runs.get(app.ui.selected));
+        flow::render_run_summary(
+            frame,
+            areas.channel,
+            app.runs.get(app.ui.selected),
+            &app.agents,
+        );
     } else {
         flow::render(
             frame,
@@ -970,6 +991,66 @@ mod tests {
     }
 
     #[test]
+    fn vim_dd_deletes_the_current_line_and_p_pastes_it_below() {
+        let mut model = prompt_model("one\ntwo\nthree");
+        model.update(Message::MovePromptUp { width: 80 });
+
+        for key in ['d', 'd', 'p'] {
+            handle_normal_prompt_key(&mut model, KeyCode::Char(key), 80);
+        }
+
+        assert_eq!(model.prompt, "one\nthree\ntwo");
+    }
+
+    #[test]
+    fn vim_uppercase_d_deletes_from_the_cursor_through_the_line_end() {
+        let mut model = prompt_model("one two\nthree");
+        model.update(Message::MovePromptToStart);
+        for _ in 0..4 {
+            model.update(Message::MovePromptRight);
+        }
+
+        handle_normal_prompt_key(&mut model, KeyCode::Char('D'), 80);
+
+        assert_eq!(model.prompt, "one \nthree");
+    }
+
+    #[test]
+    fn vim_yy_yanks_the_current_line_and_p_pastes_it_below() {
+        let mut model = prompt_model("one\ntwo");
+        model.update(Message::MovePromptUp { width: 80 });
+
+        for key in ['y', 'y', 'p'] {
+            handle_normal_prompt_key(&mut model, KeyCode::Char(key), 80);
+        }
+
+        assert_eq!(model.prompt, "one\none\ntwo");
+    }
+
+    #[test]
+    fn vim_uppercase_y_yanks_the_current_line() {
+        let mut model = prompt_model("one\ntwo");
+        model.update(Message::MovePromptUp { width: 80 });
+
+        for key in ['Y', 'p'] {
+            handle_normal_prompt_key(&mut model, KeyCode::Char(key), 80);
+        }
+
+        assert_eq!(model.prompt, "one\none\ntwo");
+    }
+
+    #[test]
+    fn vim_yiw_yanks_the_word_under_the_cursor() {
+        let mut model = prompt_model("one two");
+
+        for key in ['y', 'i', 'w', 'p'] {
+            handle_normal_prompt_key(&mut model, KeyCode::Char(key), 80);
+        }
+
+        assert_eq!(model.prompt, "one twotwo");
+    }
+
+    #[test]
     fn escape_cancels_a_pending_operator_without_closing_the_prompt() {
         let mut model = prompt_model("one two");
 
@@ -1041,6 +1122,7 @@ mod tests {
             writes: format!("{name}.md"),
             status,
             session_id: None,
+            session_group: None,
             duration: None,
             attempts: u32::from(status != NodeStatus::Pending),
             command: None,
