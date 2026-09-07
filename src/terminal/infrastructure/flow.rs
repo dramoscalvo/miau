@@ -17,24 +17,31 @@ use ratatui::{
     widgets::{List, ListItem, ListState, Paragraph, Wrap},
 };
 
-pub(crate) fn node_status_label(status: NodeStatus) -> &'static str {
-    match status {
-        NodeStatus::Pending => "Ready",
-        NodeStatus::Running => "Working",
-        NodeStatus::Done => "Waiting for you",
-        NodeStatus::Failed => "Needs attention",
-        NodeStatus::Skipped => "Skipped",
+pub(crate) fn node_status_label(status: NodeStatus, complete: bool) -> &'static str {
+    match (status, complete) {
+        (NodeStatus::Done, true) => "Complete",
+        (NodeStatus::Pending, _) => "Ready",
+        (NodeStatus::Running, _) => "Working",
+        (NodeStatus::Done, false) => "Waiting for you",
+        (NodeStatus::Failed, _) => "Needs attention",
+        (NodeStatus::Skipped, _) => "Skipped",
     }
 }
 
-fn detail_title(status: Option<NodeStatus>, activity: &str, spinner: usize) -> String {
-    match status {
-        Some(NodeStatus::Running) => {
+fn detail_title(
+    status: Option<NodeStatus>,
+    complete: bool,
+    activity: &str,
+    spinner: usize,
+) -> String {
+    match (status, complete) {
+        (Some(NodeStatus::Running), _) => {
             let spinner = ["⠋", "⠙", "⠹", "⠸"].get(spinner).copied().unwrap_or("⠋");
             format!(" Working {spinner} · {activity} ")
         }
-        Some(NodeStatus::Done) => " Artifact · waiting for you ".into(),
-        Some(NodeStatus::Failed) => " Agent output · needs attention ".into(),
+        (Some(NodeStatus::Done), true) => " Artifact · complete ".into(),
+        (Some(NodeStatus::Done), false) => " Artifact · waiting for you ".into(),
+        (Some(NodeStatus::Failed), _) => " Agent output · needs attention ".into(),
         _ => " Artifact ".into(),
     }
 }
@@ -114,13 +121,14 @@ fn node_agent_label(node: &Node, agents: &HashMap<String, AgentConfig>) -> Strin
     }
 }
 
-fn node_status_style(status: NodeStatus) -> Style {
-    match status {
-        NodeStatus::Pending => Style::default().dim(),
-        NodeStatus::Running => Style::default().cyan(),
-        NodeStatus::Done => Style::default().yellow(),
-        NodeStatus::Failed => Style::default().red().bold(),
-        NodeStatus::Skipped => Style::default().dark_gray(),
+fn node_status_style(status: NodeStatus, complete: bool) -> Style {
+    match (status, complete) {
+        (NodeStatus::Done, true) => Style::default().green(),
+        (NodeStatus::Pending, _) => Style::default().dim(),
+        (NodeStatus::Running, _) => Style::default().cyan(),
+        (NodeStatus::Done, false) => Style::default().yellow(),
+        (NodeStatus::Failed, _) => Style::default().red().bold(),
+        (NodeStatus::Skipped, _) => Style::default().dark_gray(),
     }
 }
 
@@ -329,6 +337,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
                 .iter()
                 .enumerate()
                 .map(|(i, n)| {
+                    let complete = i < r.cursor;
                     let marker = if i == r.cursor {
                         Span::from("> ").yellow().bold()
                     } else {
@@ -342,7 +351,10 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
                         marker,
                         Span::from(format!("{:<12} ", n.name)).bold(),
                         Span::from(format!("{:<8} ", n.agent)).magenta(),
-                        Span::styled(node_status_label(n.status), node_status_style(n.status)),
+                        Span::styled(
+                            node_status_label(n.status, complete),
+                            node_status_style(n.status, complete),
+                        ),
                         Span::from(duration).dark_gray(),
                     ]))
                     .style(if i == viewed_node {
@@ -365,13 +377,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
     let running = status == Some(NodeStatus::Running);
     let failed = status == Some(NodeStatus::Failed);
     let viewing_current = run.is_some_and(|run| run.cursor == viewed_node);
+    let viewing_complete = run.is_some_and(|run| viewed_node < run.cursor);
     let show_agent_output = viewing_current && !stream.is_empty() && (running || failed);
     let text = if show_agent_output {
         stream.join("\n")
     } else {
         artifact.to_owned()
     };
-    let title = detail_title(status, activity, spinner);
+    let title = detail_title(status, viewing_complete, activity, spinner);
     let scroll = if show_agent_output {
         streaming_scroll(&text, artifact_area)
     } else {
@@ -585,16 +598,18 @@ mod tests {
     fn node_status_labels_describe_the_human_action() {
         assert_eq!(
             [
-                node_status_label(NodeStatus::Pending),
-                node_status_label(NodeStatus::Running),
-                node_status_label(NodeStatus::Done),
-                node_status_label(NodeStatus::Failed),
-                node_status_label(NodeStatus::Skipped),
+                node_status_label(NodeStatus::Pending, false),
+                node_status_label(NodeStatus::Running, false),
+                node_status_label(NodeStatus::Done, false),
+                node_status_label(NodeStatus::Done, true),
+                node_status_label(NodeStatus::Failed, false),
+                node_status_label(NodeStatus::Skipped, true),
             ],
             [
                 "Ready",
                 "Working",
                 "Waiting for you",
+                "Complete",
                 "Needs attention",
                 "Skipped"
             ]
@@ -605,12 +620,14 @@ mod tests {
     fn detail_title_distinguishes_work_from_human_attention() {
         assert_eq!(
             [
-                detail_title(Some(NodeStatus::Running), "thinking", 0),
-                detail_title(Some(NodeStatus::Done), "", 0),
+                detail_title(Some(NodeStatus::Running), true, "thinking", 0),
+                detail_title(Some(NodeStatus::Done), false, "thinking", 0),
+                detail_title(Some(NodeStatus::Done), true, "", 0),
             ],
             [
                 " Working ⠋ · thinking ".to_owned(),
                 " Artifact · waiting for you ".to_owned(),
+                " Artifact · complete ".to_owned(),
             ]
         );
     }

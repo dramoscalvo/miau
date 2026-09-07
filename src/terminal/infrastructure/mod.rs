@@ -82,6 +82,14 @@ fn can_finish(run: Option<&Run>, mode: &Mode) -> bool {
         })
 }
 
+fn confirmation_result_mode(action: Action, confirmed: bool) -> Option<Mode> {
+    match (action, confirmed) {
+        (Action::Quit, true) => None,
+        (Action::Stop | Action::Finish, true) | (Action::Finish, false) => Some(Mode::Gate),
+        (Action::Quit | Action::Stop, false) => Some(Mode::Streaming),
+    }
+}
+
 fn prompt_kind(run: Option<&Run>, viewed_node: usize) -> Option<PromptKind> {
     let run = run?;
     let node = run.nodes.get(viewed_node)?;
@@ -486,13 +494,17 @@ impl App {
                             Action::Quit | Action::Stop => self.stop_running()?,
                             Action::Finish => self.finish_run()?,
                         }
-                        Ok(action == Action::Quit)
+                        let mode = confirmation_result_mode(action, true);
+                        let should_quit = mode.is_none();
+                        if let Some(mode) = mode {
+                            self.ui.mode = mode;
+                        }
+                        Ok(should_quit)
                     }
                     KeyCode::Char('n') | KeyCode::Esc => {
-                        self.ui.mode = match action {
-                            Action::Finish => Mode::Gate,
-                            Action::Quit | Action::Stop => Mode::Streaming,
-                        };
+                        if let Some(mode) = confirmation_result_mode(action, false) {
+                            self.ui.mode = mode;
+                        }
                         Ok(false)
                     }
                     _ => Ok(false),
@@ -847,10 +859,13 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
 
 #[cfg(test)]
 mod tests {
-    use super::{can_finish, handle_normal_prompt_key, prompt_kind, returns_to_run_list};
+    use super::{
+        can_finish, confirmation_result_mode, handle_normal_prompt_key, prompt_kind,
+        returns_to_run_list,
+    };
     use crate::{
         runs::domain::{Node, NodeStatus, Run},
-        terminal::application::{Message, Mode, Model, PromptEditMode, PromptKind},
+        terminal::application::{Action, Message, Mode, Model, PromptEditMode, PromptKind},
     };
     use chrono::Utc;
     use crossterm::event::KeyCode;
@@ -879,6 +894,14 @@ mod tests {
                 can_finish(Some(&complete), &Mode::Gate),
             ),
             (true, false, false)
+        );
+    }
+
+    #[test]
+    fn confirming_finish_returns_to_the_gate() {
+        assert_eq!(
+            confirmation_result_mode(Action::Finish, true),
+            Some(Mode::Gate)
         );
     }
 
