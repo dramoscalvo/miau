@@ -13,6 +13,9 @@ use std::{
 };
 use thiserror::Error;
 
+const MINIMAL_IMPLEMENTATION_GUIDANCE: &str =
+    "Look for the minimal implementation needed to achieve the goal.";
+
 #[derive(Debug, Error)]
 pub enum OrchestratorError {
     #[error(transparent)]
@@ -51,7 +54,11 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
     ) -> Result<String, OrchestratorError> {
         let node = run.current().ok_or(OrchestratorError::NoCurrentNode)?;
         let role_path = self.roles_dir.join(format!("{}.md", node.role));
-        let role = self.repository.read_text(&role_path)?;
+        let mut role = self.repository.read_text(&role_path)?;
+        if matches!(node.name.as_str(), "plan" | "critique") {
+            role.push_str("\n\n");
+            role.push_str(MINIMAL_IMPLEMENTATION_GUIDANCE);
+        }
         let spec = self.spec_section(run)?;
         let feedback = run
             .current()
@@ -360,6 +367,40 @@ mod tests {
             .unwrap();
         assert!(prompt.contains("edited on disk"));
         assert!(prompt.contains("focus on data"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn plan_prompt_requests_the_minimal_implementation_for_the_goal() {
+        let root = std::env::temp_dir().join(format!("miau-plan-prompt-{}", std::process::id()));
+        fs::create_dir_all(root.join("roles")).unwrap();
+        fs::write(root.join("roles/planner.md"), "Produce a plan.").unwrap();
+        let repo = FileRepository::new(root.join("runs"));
+        let mut run = fixture(&root);
+        run.cursor = 0;
+
+        let prompt = Orchestrator::new(repo, root.join("roles"))
+            .assemble_prompt(&run, None)
+            .unwrap();
+
+        assert!(prompt.contains("Look for the minimal implementation needed to achieve the goal."));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn critique_prompt_requests_the_minimal_implementation_for_the_goal() {
+        let root =
+            std::env::temp_dir().join(format!("miau-critique-prompt-{}", std::process::id()));
+        fs::create_dir_all(root.join("roles")).unwrap();
+        fs::write(root.join("roles/critic.md"), "Critique the plan.").unwrap();
+        let repo = FileRepository::new(root.join("runs"));
+        repo.write("001", "plan.md", "A plan").unwrap();
+
+        let prompt = Orchestrator::new(repo, root.join("roles"))
+            .assemble_prompt(&fixture(&root), None)
+            .unwrap();
+
+        assert!(prompt.contains("Look for the minimal implementation needed to achieve the goal."));
         let _ = fs::remove_dir_all(root);
     }
 
