@@ -36,6 +36,7 @@ fn confirmation_text(action: &Action) -> &'static str {
     match action {
         Action::Quit => "kill running agent and quit? y/n",
         Action::Stop => "stop running agent and keep miau open? y/n",
+        Action::Finish => "finish this run and skip all unfinished steps? y/n",
     }
 }
 
@@ -44,6 +45,7 @@ fn gate_text(
     is_current: bool,
     can_prompt: bool,
     can_discuss: bool,
+    can_finish: bool,
 ) -> String {
     let mut commands = Vec::new();
     match status {
@@ -74,6 +76,9 @@ fn gate_text(
         Some(NodeStatus::Pending | NodeStatus::Running | NodeStatus::Skipped) => {}
         None => commands.push("workflow complete"),
     }
+    if can_finish {
+        commands.push("f finish");
+    }
     commands.extend(["←/→ agents", "b runs", "tab pane", "q quit"]);
     commands.join(" · ")
 }
@@ -85,6 +90,7 @@ pub struct HelpView<'a> {
     pub is_current: bool,
     pub can_prompt: bool,
     pub can_discuss: bool,
+    pub can_finish: bool,
     pub error: Option<&'a str>,
     pub prompt: &'a str,
     pub prompt_cursor: usize,
@@ -98,6 +104,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         is_current,
         can_prompt,
         can_discuss,
+        can_finish,
         error,
         prompt,
         prompt_cursor,
@@ -155,7 +162,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         let hints = match mode {
             Mode::RunList => "enter open · n new · q quit".into(),
             Mode::Streaming => "←/→ agents · tab pane · ↑↓ scroll · x stop · q quit".into(),
-            Mode::Gate => gate_text(status, is_current, can_prompt, can_discuss),
+            Mode::Gate => gate_text(status, is_current, can_prompt, can_discuss, can_finish),
             Mode::Prompt(_) => String::new(),
             Mode::Confirm(action) => confirmation_text(action).into(),
         };
@@ -189,6 +196,7 @@ mod tests {
                         is_current: false,
                         can_prompt: false,
                         can_discuss: false,
+                        can_finish: false,
                         error: None,
                         prompt: "",
                         prompt_cursor: 0,
@@ -214,33 +222,41 @@ mod tests {
     }
 
     #[test]
+    fn finish_confirmation_explains_that_unfinished_steps_are_skipped() {
+        assert_eq!(
+            confirmation_text(&Action::Finish),
+            "finish this run and skip all unfinished steps? y/n"
+        );
+    }
+
+    #[test]
     fn pending_current_agent_advertises_prompt_before_start() {
         assert_eq!(
-            gate_text(Some(NodeStatus::Pending), true, true, false),
-            "p prompt · s start · ←/→ agents · b runs · tab pane · q quit"
+            gate_text(Some(NodeStatus::Pending), true, true, false, true),
+            "p prompt · s start · f finish · ←/→ agents · b runs · tab pane · q quit"
         );
     }
 
     #[test]
     fn completed_gate_advertises_only_decision_commands() {
         assert_eq!(
-            gate_text(Some(NodeStatus::Done), true, true, true),
-            "a approve · p prompt · e edit · d discuss · ←/→ agents · b runs · tab pane · q quit"
+            gate_text(Some(NodeStatus::Done), true, true, true, true),
+            "a approve · p prompt · e edit · d discuss · f finish · ←/→ agents · b runs · tab pane · q quit"
         );
     }
 
     #[test]
     fn completed_historical_agent_advertises_follow_up_without_approval() {
         assert_eq!(
-            gate_text(Some(NodeStatus::Done), false, true, true),
-            "p prompt · d discuss · ←/→ agents · b runs · tab pane · q quit"
+            gate_text(Some(NodeStatus::Done), false, true, true, true),
+            "p prompt · d discuss · f finish · ←/→ agents · b runs · tab pane · q quit"
         );
     }
 
     #[test]
     fn command_nodes_do_not_advertise_agent_prompting() {
         assert_eq!(
-            gate_text(Some(NodeStatus::Done), false, false, false),
+            gate_text(Some(NodeStatus::Done), false, false, false, false),
             "←/→ agents · b runs · tab pane · q quit"
         );
     }
@@ -262,6 +278,7 @@ mod tests {
                         is_current: false,
                         can_prompt: false,
                         can_discuss: false,
+                        can_finish: false,
                         error: None,
                         prompt: "",
                         prompt_cursor: 0,

@@ -71,6 +71,17 @@ fn returns_to_run_list(code: KeyCode, mode: &Mode) -> bool {
     code == KeyCode::Char('b') && matches!(mode, Mode::Gate)
 }
 
+fn can_finish(run: Option<&Run>, mode: &Mode) -> bool {
+    matches!(mode, Mode::Gate)
+        && run.is_some_and(|run| {
+            run.current().is_some()
+                && !run
+                    .nodes
+                    .iter()
+                    .any(|node| node.status == NodeStatus::Running)
+        })
+}
+
 fn prompt_kind(run: Option<&Run>, viewed_node: usize) -> Option<PromptKind> {
     let run = run?;
     let node = run.nodes.get(viewed_node)?;
@@ -471,11 +482,17 @@ impl App {
                 let action = *action;
                 return match code {
                     KeyCode::Char('y') => {
-                        self.stop_running()?;
+                        match action {
+                            Action::Quit | Action::Stop => self.stop_running()?,
+                            Action::Finish => self.finish_run()?,
+                        }
                         Ok(action == Action::Quit)
                     }
                     KeyCode::Char('n') | KeyCode::Esc => {
-                        self.ui.mode = Mode::Streaming;
+                        self.ui.mode = match action {
+                            Action::Finish => Mode::Gate,
+                            Action::Quit | Action::Stop => Mode::Streaming,
+                        };
                         Ok(false)
                     }
                     _ => Ok(false),
@@ -530,6 +547,10 @@ impl App {
         }
         if code == KeyCode::Char('x') && matches!(self.ui.mode, Mode::Streaming) {
             self.ui.mode = Mode::Confirm(Action::Stop);
+            return Ok(false);
+        }
+        if code == KeyCode::Char('f') && can_finish(self.run.as_ref(), &self.ui.mode) {
+            self.ui.mode = Mode::Confirm(Action::Finish);
             return Ok(false);
         }
         if matches!(self.ui.mode, Mode::RunList) {
@@ -648,6 +669,16 @@ impl App {
             },
         ))?;
         self.ui.error = None;
+        Ok(())
+    }
+    fn finish_run(&mut self) -> Result<()> {
+        let run = self.run.as_mut().ok_or_else(|| anyhow!("no run"))?;
+        self.orchestrator.finish(run)?;
+        if let Some(listed) = self.runs.iter_mut().find(|listed| listed.id == run.id) {
+            listed.clone_from(run);
+        }
+        self.ui.error = None;
+        self.reload_artifact()?;
         Ok(())
     }
     fn scroll(&mut self, delta: i16) {
@@ -798,6 +829,7 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
                 .is_some_and(|run| run.cursor == app.ui.viewed_node),
             can_prompt: app.prompt_ready(),
             can_discuss: app.discuss_ready(),
+            can_finish: can_finish(app.run.as_ref(), &app.ui.mode),
             error: if app
                 .run
                 .as_ref()
@@ -815,7 +847,7 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle_normal_prompt_key, prompt_kind, returns_to_run_list};
+    use super::{can_finish, handle_normal_prompt_key, prompt_kind, returns_to_run_list};
     use crate::{
         runs::domain::{Node, NodeStatus, Run},
         terminal::application::{Message, Mode, Model, PromptEditMode, PromptKind},
@@ -831,6 +863,22 @@ mod tests {
                 returns_to_run_list(KeyCode::Char('b'), &Mode::Streaming),
             ),
             (true, false)
+        );
+    }
+
+    #[test]
+    fn finish_is_available_only_for_an_incomplete_run_at_a_gate() {
+        let run = run_with_nodes(vec![node("plan", NodeStatus::Pending)]);
+        let mut complete = run.clone();
+        complete.cursor = complete.nodes.len();
+
+        assert_eq!(
+            (
+                can_finish(Some(&run), &Mode::Gate),
+                can_finish(Some(&run), &Mode::Streaming),
+                can_finish(Some(&complete), &Mode::Gate),
+            ),
+            (true, false, false)
         );
     }
 

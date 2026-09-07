@@ -75,6 +75,7 @@ pub enum SubmittedPrompt {
 pub enum Action {
     Quit,
     Stop,
+    Finish,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1081,6 +1082,11 @@ mod tests {
     #[test]
     fn stop_confirmation_is_distinct_from_quitting() {
         assert_ne!(Action::Stop, Action::Quit);
+    }
+
+    #[test]
+    fn finish_confirmation_is_distinct_from_stopping() {
+        assert_ne!(Action::Finish, Action::Stop);
     }
 
     #[test]

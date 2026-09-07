@@ -189,7 +189,8 @@ yanked or deleted text. The `diw`/`ciw`/`yiw` commands delete/change/yank the
 word under the cursor; `daw`/`caw`/`yaw` include its adjacent whitespace, and
 uppercase `W` works for each text object. Press `Esc` again from Normal mode to
 cancel the prompt. Use `a`, `e`, and `d` at a decision gate to approve, edit, or
-open an interactive discussion.
+open an interactive discussion. Press `f` and confirm to finish the run; miau
+preserves completed steps and marks every unfinished step as skipped.
 
 Use Left and Right to move between the workflow's agents. The highlighted row is
 the agent being viewed; `>` still marks the current workflow gate. Each agent's

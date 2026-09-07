@@ -300,6 +300,26 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
         Ok(note)
     }
 
+    pub fn finish(&self, run: &mut Run) -> Result<(), OrchestratorError> {
+        if run
+            .nodes
+            .iter()
+            .any(|node| node.status == NodeStatus::Running)
+        {
+            return Err(OrchestratorError::RunIsActive);
+        }
+        for node in &mut run.nodes {
+            if !matches!(node.status, NodeStatus::Done | NodeStatus::Skipped) {
+                node.status = NodeStatus::Skipped;
+            }
+        }
+        run.cursor = run.nodes.len();
+        run.channel
+            .push(ChannelEntry::new("you", None, "run finished by operator"));
+        self.repository.save(run)?;
+        Ok(())
+    }
+
     pub fn repository(&self) -> &R {
         &self.repository
     }
@@ -572,6 +592,60 @@ mod tests {
 
         let error = Orchestrator::new(repo, root.join("roles"))
             .revisit(&mut run, 0, "wait".into())
+            .unwrap_err();
+
+        assert!(matches!(error, OrchestratorError::RunIsActive));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn finish_marks_unfinished_nodes_skipped_and_completes_the_run() {
+        let root = std::env::temp_dir().join(format!("miau-finish-{}", std::process::id()));
+        let repo = FileRepository::new(root.join("runs"));
+        let mut run = fixture(&root);
+        run.nodes[1].status = NodeStatus::Failed;
+        run.nodes.push(Node {
+            name: "implement".into(),
+            agent: "codex".into(),
+            role: "implementer".into(),
+            writes: "implementation.md".into(),
+            status: NodeStatus::Pending,
+            session_id: None,
+            session_group: None,
+            duration: None,
+            attempts: 0,
+            command: None,
+            skip_if_no_python_changes: false,
+        });
+
+        Orchestrator::new(repo, root.join("roles"))
+            .finish(&mut run)
+            .unwrap();
+
+        assert_eq!(
+            (
+                run.cursor,
+                run.nodes.iter().map(|node| node.status).collect::<Vec<_>>(),
+                run.channel.last().map(|entry| entry.summary.as_str()),
+            ),
+            (
+                3,
+                vec![NodeStatus::Done, NodeStatus::Skipped, NodeStatus::Skipped],
+                Some("run finished by operator"),
+            )
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn finish_rejects_a_run_with_an_active_node() {
+        let root = std::env::temp_dir().join(format!("miau-finish-active-{}", std::process::id()));
+        let repo = FileRepository::new(root.join("runs"));
+        let mut run = fixture(&root);
+        run.nodes[1].status = NodeStatus::Running;
+
+        let error = Orchestrator::new(repo, root.join("roles"))
+            .finish(&mut run)
             .unwrap_err();
 
         assert!(matches!(error, OrchestratorError::RunIsActive));
