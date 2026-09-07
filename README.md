@@ -188,7 +188,10 @@ of the line, `yy` or `Y` to yank the current line, and `p` to paste the last
 yanked or deleted text. The `diw`/`ciw`/`yiw` commands delete/change/yank the
 word under the cursor; `daw`/`caw`/`yaw` include its adjacent whitespace, and
 uppercase `W` works for each text object. Press `Esc` again from Normal mode to
-cancel the prompt. Use `a`, `e`, and `d` at a decision gate to approve, edit, or
+cancel the prompt. In Insert mode, the terminal's clipboard shortcut (commonly
+`Ctrl+Shift+V` or `Shift+Insert`) pastes system clipboard text, including
+multiple lines. Normal-mode `p` only pastes text yanked or deleted within miau.
+Use `a`, `e`, and `d` at a decision gate to approve, edit, or
 open an interactive discussion. Press `f` and confirm to finish the run; miau
 preserves completed steps and marks every unfinished step as skipped.
 
@@ -200,6 +203,14 @@ resume its captured session when available. This re-queues that workflow step
 while preserving the results of later steps, which will be offered again in
 order. Press `d` to open that agent's captured session interactively without
 changing workflow state.
+
+Press `v` from a project screen to switch the detail area between the selected
+agent's artifact and the project's live Git working tree. The tree marks added
+files in green, modified files in yellow, deleted files in red, and renamed
+files in cyan. Use `j`/`k` or Up/Down to select a file and Page Up/Page Down to
+scroll its unified diff. This view reports all current working-tree changes,
+including changes that existed before the run; it does not yet attribute files
+to an individual run or workflow step.
 
 The Activity pane follows the newest activity by default. Press Tab to focus it,
 then use Up, Down, Page Up, or Page Down to browse its history; scrolling down

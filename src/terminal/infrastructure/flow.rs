@@ -6,7 +6,8 @@ use super::pane;
 use crate::{
     execution::application::AgentConfig,
     runs::domain::{Node, NodeStatus, Run},
-    terminal::application::Focus,
+    terminal::application::{DetailView, Focus},
+    workflow::domain::{WorkingTreeChange, WorkingTreeChangeKind},
 };
 use chrono::{DateTime, Utc};
 use ratatui::{
@@ -167,12 +168,7 @@ pub fn render_runs(
     agents: &HashMap<String, AgentConfig>,
 ) {
     if runs.is_empty() {
-        frame.render_widget(
-            Paragraph::new("No runs yet — press n to create one")
-                .style(Style::default().dim())
-                .block(pane::block(" Runs ", focus == Focus::Flow)),
-            area,
-        );
+        render_empty_runs(frame, area, focus);
         return;
     }
 
@@ -215,6 +211,43 @@ pub fn render_runs(
         area,
         &mut state,
     );
+}
+
+fn render_empty_runs(frame: &mut Frame<'_>, area: Rect, focus: Focus) {
+    let block = pane::block(" Runs ", focus == Focus::Flow);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    if inner.width < 49 || inner.height < 12 {
+        frame.render_widget(
+            Paragraph::new("No runs yet — press n to create one").style(Style::default().dim()),
+            inner,
+        );
+        return;
+    }
+
+    let lines = vec![
+        Line::from("▄█▄       ▄█▄").magenta().bold(),
+        Line::from("███▄     ▄███").magenta().bold(),
+        Line::from("█████████████").magenta().bold(),
+        Line::from("███ ▀███▀ ███").magenta().bold(),
+        Line::from("███   ▄   ███").magenta().bold(),
+        Line::from("▀███▄▀▀▀▄███▀").magenta().bold(),
+        Line::from("  ▀███████▀").magenta().bold(),
+        Line::default(),
+        Line::from("miau").cyan().bold(),
+        Line::from("one agent at a time · you decide what happens next").dim(),
+        Line::default(),
+        Line::from("No runs yet — press n to create one").dim(),
+    ];
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX);
+    let [_, art, _] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(height),
+        Constraint::Fill(1),
+    ])
+    .areas(inner);
+    frame.render_widget(Paragraph::new(lines).centered(), art);
 }
 
 fn next_action(run: &Run) -> String {
@@ -314,6 +347,29 @@ pub struct FlowView<'a> {
     pub focus: Focus,
     pub spinner: usize,
     pub activity: &'a str,
+    pub detail_view: DetailView,
+    pub working_tree: WorkingTreeView<'a>,
+}
+
+pub struct WorkingTreeView<'a> {
+    pub changes: &'a [WorkingTreeChange],
+    pub selected: usize,
+    pub diff: &'a str,
+    pub scroll: u16,
+    pub error: Option<&'a str>,
+}
+
+impl WorkingTreeView<'_> {
+    #[cfg(test)]
+    fn empty() -> Self {
+        Self {
+            changes: &[],
+            selected: 0,
+            diff: "",
+            scroll: 0,
+            error: None,
+        }
+    }
 }
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
@@ -326,6 +382,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
         focus,
         spinner,
         activity,
+        detail_view,
+        working_tree,
     } = view;
     let [nodes_area, artifact_area] = Layout::default()
         .direction(Direction::Vertical)
@@ -379,6 +437,10 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
     let viewing_current = run.is_some_and(|run| run.cursor == viewed_node);
     let viewing_complete = run.is_some_and(|run| viewed_node < run.cursor);
     let show_agent_output = viewing_current && !stream.is_empty() && (running || failed);
+    if detail_view == DetailView::Changes {
+        render_working_tree(frame, artifact_area, working_tree, focus);
+        return;
+    }
     let text = if show_agent_output {
         stream.join("\n")
     } else {
@@ -399,6 +461,142 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
     );
 }
 
+fn render_working_tree(frame: &mut Frame<'_>, area: Rect, view: WorkingTreeView<'_>, focus: Focus) {
+    if let Some(error) = view.error {
+        frame.render_widget(
+            Paragraph::new(format!("Unable to inspect working tree: {error}"))
+                .red()
+                .block(pane::block(" Working tree ", focus == Focus::Flow))
+                .wrap(Wrap { trim: false }),
+            area,
+        );
+        return;
+    }
+    if view.changes.is_empty() {
+        frame.render_widget(
+            Paragraph::new("Working tree clean")
+                .dim()
+                .block(pane::block(" Working tree ", focus == Focus::Flow)),
+            area,
+        );
+        return;
+    }
+
+    let [tree_area, diff_area] = if area.width >= 80 {
+        Layout::horizontal([Constraint::Percentage(38), Constraint::Fill(1)]).areas(area)
+    } else {
+        Layout::vertical([Constraint::Percentage(40), Constraint::Fill(1)]).areas(area)
+    };
+    let (items, selected_row) = working_tree_items(view.changes, view.selected);
+    let mut state = ListState::default().with_selected(Some(selected_row));
+    frame.render_stateful_widget(
+        List::new(items)
+            .block(pane::block(" Working tree ", focus == Focus::Flow))
+            .highlight_style(Style::default().on_dark_gray().bold()),
+        tree_area,
+        &mut state,
+    );
+    frame.render_widget(
+        Paragraph::new(styled_diff(view.diff))
+            .block(pane::block(" Diff ", false))
+            .scroll((view.scroll, 0))
+            .wrap(Wrap { trim: false }),
+        diff_area,
+    );
+}
+
+fn working_tree_items(
+    changes: &[WorkingTreeChange],
+    selected: usize,
+) -> (Vec<ListItem<'static>>, usize) {
+    let mut items = Vec::new();
+    let mut previous_directories = Vec::<String>::new();
+    let mut selected_row = 0;
+
+    for (index, change) in changes.iter().enumerate() {
+        let directories = change
+            .path
+            .parent()
+            .into_iter()
+            .flat_map(Path::components)
+            .map(|component| component.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let shared = directories
+            .iter()
+            .zip(&previous_directories)
+            .take_while(|(left, right)| left == right)
+            .count();
+        for (depth, directory) in directories.iter().enumerate().skip(shared) {
+            items.push(ListItem::new(Line::from(vec![
+                Span::from("  ".repeat(depth)).dim(),
+                Span::from(format!("{directory}/")).magenta().bold(),
+            ])));
+        }
+        if index == selected {
+            selected_row = items.len();
+        }
+        let name = change.display_path().file_name().map_or_else(
+            || change.path.display().to_string(),
+            |name| name.to_string_lossy().into(),
+        );
+        let rename = change
+            .previous_path
+            .as_ref()
+            .map_or_else(String::new, |previous| format!(" ← {}", previous.display()));
+        items.push(ListItem::new(Line::from(vec![
+            Span::from("  ".repeat(directories.len())).dim(),
+            Span::styled(
+                format!("{} ", change_marker(change.kind)),
+                change_style(change.kind),
+            ),
+            Span::from(name),
+            Span::from(rename).dark_gray(),
+        ])));
+        previous_directories = directories;
+    }
+
+    (items, selected_row)
+}
+
+fn change_marker(kind: WorkingTreeChangeKind) -> &'static str {
+    match kind {
+        WorkingTreeChangeKind::Added => "A",
+        WorkingTreeChangeKind::Modified => "M",
+        WorkingTreeChangeKind::Deleted => "D",
+        WorkingTreeChangeKind::Renamed => "R",
+    }
+}
+
+fn change_style(kind: WorkingTreeChangeKind) -> Style {
+    match kind {
+        WorkingTreeChangeKind::Added => Style::default().green().bold(),
+        WorkingTreeChangeKind::Modified => Style::default().yellow().bold(),
+        WorkingTreeChangeKind::Deleted => Style::default().red().bold(),
+        WorkingTreeChangeKind::Renamed => Style::default().cyan().bold(),
+    }
+}
+
+fn styled_diff(diff: &str) -> Vec<Line<'static>> {
+    diff.lines()
+        .map(|line| {
+            let span = if line.starts_with("+++") || line.starts_with("---") {
+                Span::from(line.to_owned()).dim()
+            } else if line.starts_with('+') {
+                Span::from(line.to_owned()).green()
+            } else if line.starts_with('-') {
+                Span::from(line.to_owned()).red()
+            } else if line.starts_with("@@") {
+                Span::from(line.to_owned()).cyan()
+            } else if line.starts_with("diff ") || line.starts_with("index ") {
+                Span::from(line.to_owned()).dark_gray()
+            } else {
+                Span::from(line.to_owned())
+            };
+            Line::from(span)
+        })
+        .collect()
+}
+
 fn streaming_scroll(text: &str, area: Rect) -> u16 {
     let width = area.width.saturating_sub(2);
     let visible_height = usize::from(area.height.saturating_sub(2));
@@ -412,13 +610,14 @@ fn streaming_scroll(text: &str, area: Rect) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::{
-        FlowView, detail_title, node_status_label, render, render_run_summary, render_runs,
-        streaming_scroll,
+        FlowView, WorkingTreeView, detail_title, node_status_label, render, render_run_summary,
+        render_runs, render_working_tree, streaming_scroll,
     };
     use crate::{
         execution::application::AgentConfig,
         runs::domain::{ChannelEntry, Node, NodeStatus, Run},
-        terminal::application::Focus,
+        terminal::application::{DetailView, Focus},
+        workflow::domain::{WorkingTreeChange, WorkingTreeChangeKind},
     };
     use chrono::{TimeZone, Utc};
     use ratatui::{Terminal, backend::TestBackend};
@@ -554,8 +753,46 @@ mod tests {
     }
 
     #[test]
-    fn empty_run_list_invites_the_user_to_create_a_run() {
-        let mut terminal = Terminal::new(TestBackend::new(60, 5)).unwrap();
+    fn empty_run_list_shows_the_miau_cat_and_human_gated_purpose() {
+        let mut terminal = Terminal::new(TestBackend::new(60, 15)).unwrap();
+        let agents = HashMap::new();
+
+        terminal
+            .draw(|frame| {
+                render_runs(
+                    frame,
+                    frame.area(),
+                    &[],
+                    0,
+                    Focus::Flow,
+                    Utc::now(),
+                    &agents,
+                );
+            })
+            .unwrap();
+
+        let text = buffer_text(&terminal);
+        let expected = [
+            "▄█▄       ▄█▄",
+            "███ ▀███▀ ███",
+            "miau",
+            "one agent at a time · you decide what happens next",
+            "No runs yet",
+            "create one",
+        ];
+        let missing = expected
+            .iter()
+            .filter(|expected| !text.contains(*expected))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing {missing:?} from rendered empty state: {text}"
+        );
+    }
+
+    #[test]
+    fn empty_run_list_keeps_the_creation_prompt_in_a_small_pane() {
+        let mut terminal = Terminal::new(TestBackend::new(40, 5)).unwrap();
         let agents = HashMap::new();
 
         terminal
@@ -673,6 +910,8 @@ mod tests {
                         focus: Focus::Flow,
                         spinner: 0,
                         activity: "",
+                        detail_view: DetailView::Artifact,
+                        working_tree: WorkingTreeView::empty(),
                     },
                 );
             })
@@ -706,6 +945,8 @@ mod tests {
                         focus: Focus::Channel,
                         spinner: 0,
                         activity: "",
+                        detail_view: DetailView::Artifact,
+                        working_tree: WorkingTreeView::empty(),
                     },
                 );
             })
@@ -715,6 +956,53 @@ mod tests {
         assert_eq!(
             (buffer[(16, 2)].fg, buffer[(25, 2)].fg, buffer[(40, 2)].fg),
             (Color::Magenta, Color::Yellow, Color::DarkGray)
+        );
+    }
+
+    #[test]
+    fn working_tree_renders_hierarchy_status_colors_and_diff_colors() {
+        let changes = vec![
+            WorkingTreeChange::new("docs/new.md", WorkingTreeChangeKind::Added),
+            WorkingTreeChange::new("src/changed.rs", WorkingTreeChangeKind::Modified),
+            WorkingTreeChange::new("src/removed.rs", WorkingTreeChangeKind::Deleted),
+            WorkingTreeChange::renamed("old.rs", "src/renamed.rs"),
+        ];
+        let mut terminal = Terminal::new(TestBackend::new(100, 18)).unwrap();
+
+        terminal
+            .draw(|frame| {
+                render_working_tree(
+                    frame,
+                    frame.area(),
+                    WorkingTreeView {
+                        changes: &changes,
+                        selected: 0,
+                        diff: "@@ -1 +1 @@\n-old line\n+new line",
+                        scroll: 0,
+                        error: None,
+                    },
+                    Focus::Flow,
+                );
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let text = buffer_text(&terminal);
+        assert!(text.contains("docs/") && text.contains("src/") && text.contains("← old.rs"));
+        assert!(
+            [
+                ("A", Color::Green),
+                ("M", Color::Yellow),
+                ("D", Color::Red),
+                ("R", Color::Cyan),
+                ("+", Color::Green),
+                ("-", Color::Red),
+            ]
+            .iter()
+            .all(|(symbol, color)| buffer
+                .content
+                .iter()
+                .any(|cell| cell.symbol() == *symbol && cell.fg == *color))
         );
     }
 }

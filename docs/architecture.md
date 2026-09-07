@@ -19,6 +19,11 @@ use case. Prompt assembly reads role/spec/artifact content through repository
 ports. Severity in critique/review output is presentation data only; it must
 never control a transition.
 
+Working-tree inspection is exposed through the workflow application's
+`WorkingTreeRepository` port. Git status parsing and diff process execution live
+in workflow infrastructure, while the terminal consumes only normalized change
+kinds and paths.
+
 Workflow nodes may opt into a named session group. At process start, the
 orchestrator selects only the newest captured session from an earlier node with
 the same group and configured agent. The session ID remains part of persisted

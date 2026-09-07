@@ -19,19 +19,22 @@ use crate::{
         infrastructure::FileRepository,
     },
     terminal::application::{
-        Action, Message, Mode, Model, PromptEditMode, PromptKind, PromptOperator,
+        Action, DetailView, Message, Mode, Model, PromptEditMode, PromptKind, PromptOperator,
         PromptPendingCommand, PromptTextObject, PromptWordStyle, SubmittedPrompt,
     },
     workflow::{
-        application::Orchestrator,
-        domain::WorkflowConfig,
-        infrastructure::{GitChangeDetector, load_agents, load_workflow},
+        application::{Orchestrator, WorkingTreeRepository},
+        domain::{WorkflowConfig, WorkingTreeChange},
+        infrastructure::{GitChangeDetector, GitWorkingTree, load_agents, load_workflow},
     },
 };
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use crossterm::{
-    event::{EnableMouseCapture, Event as TerminalEvent, EventStream, KeyCode, KeyEventKind},
+    event::{
+        EnableBracketedPaste, EnableMouseCapture, Event as TerminalEvent, EventStream, KeyCode,
+        KeyEventKind,
+    },
     execute,
     terminal::{EnterAlternateScreen, enable_raw_mode},
 };
@@ -59,6 +62,10 @@ struct App {
     artifact: String,
     stream: Vec<String>,
     agent_activity: String,
+    changes: Vec<WorkingTreeChange>,
+    change_diff: String,
+    working_tree_error: Option<String>,
+    working_tree: GitWorkingTree,
     running: Option<RunningAgent>,
     started: Option<Instant>,
     agents: HashMap<String, AgentConfig>,
@@ -235,6 +242,10 @@ impl App {
             artifact: String::new(),
             stream: vec![],
             agent_activity: String::new(),
+            changes: vec![],
+            change_diff: String::new(),
+            working_tree_error: None,
+            working_tree: GitWorkingTree,
             running: None,
             started: None,
             agents: load_agents(&config.agents)?,
@@ -330,12 +341,57 @@ impl App {
         Ok(())
     }
 
+    fn reload_working_tree(&mut self) {
+        let Some(project) = self.run.as_ref().map(|run| run.project.as_path()) else {
+            self.changes.clear();
+            self.change_diff.clear();
+            self.working_tree_error = None;
+            return;
+        };
+        match self.working_tree.changes(project) {
+            Ok(changes) => {
+                self.changes = changes;
+                self.working_tree_error = None;
+                self.ui.change_selected = self
+                    .ui
+                    .change_selected
+                    .min(self.changes.len().saturating_sub(1));
+                self.reload_change_diff();
+            }
+            Err(error) => {
+                self.changes.clear();
+                self.change_diff.clear();
+                self.working_tree_error = Some(error.to_string());
+            }
+        }
+    }
+
+    fn reload_change_diff(&mut self) {
+        let selected = self.changes.get(self.ui.change_selected);
+        self.change_diff = match (self.run.as_ref(), selected) {
+            (Some(run), Some(change)) => self
+                .working_tree
+                .diff(&run.project, change)
+                .unwrap_or_else(|error| format!("Unable to load diff: {error}")),
+            _ => String::new(),
+        };
+    }
+
+    fn refresh_working_tree_if_visible(&mut self) {
+        if self.ui.detail_view == DetailView::Changes {
+            self.reload_working_tree();
+        }
+    }
+
     fn return_to_run_list(&mut self) {
         self.ui.return_to_run_list();
         self.run = None;
         self.artifact.clear();
         self.stream.clear();
         self.agent_activity.clear();
+        self.changes.clear();
+        self.change_diff.clear();
+        self.working_tree_error = None;
     }
 
     async fn start_current(&mut self) -> Result<()> {
@@ -419,6 +475,10 @@ impl App {
 
     fn accept_event(&mut self, event: Event) -> Result<()> {
         self.agent_activity = activity_for_event(&event.kind);
+        let refresh_working_tree = matches!(
+            event.kind,
+            EventKind::FileChange { .. } | EventKind::Done { .. } | EventKind::Failed { .. }
+        );
         match &event.kind {
             EventKind::Progress(_) => {}
             EventKind::Text(text) | EventKind::Reasoning(text) => {
@@ -448,6 +508,9 @@ impl App {
         ) {
             self.ui.mode = Mode::Gate;
             self.reload_artifact()?;
+        }
+        if refresh_working_tree {
+            self.refresh_working_tree_if_visible();
         }
         Ok(())
     }
@@ -581,6 +644,10 @@ impl App {
             _ if returns_to_run_list(code, &self.ui.mode) => {
                 self.return_to_run_list();
             }
+            KeyCode::Char('v') => {
+                self.ui.update(Message::ToggleDetailView);
+                self.refresh_working_tree_if_visible();
+            }
             KeyCode::Left => {
                 self.ui.update(Message::ViewPreviousNode);
                 self.reload_artifact()?;
@@ -594,6 +661,34 @@ impl App {
                 self.reload_artifact()?;
             }
             KeyCode::Tab => self.ui.update(Message::ToggleFocus),
+            KeyCode::Up | KeyCode::Char('k')
+                if self.ui.detail_view == DetailView::Changes
+                    && self.ui.focus == crate::terminal::application::Focus::Flow =>
+            {
+                self.ui.update(Message::SelectPreviousChange);
+                self.reload_change_diff();
+            }
+            KeyCode::Down | KeyCode::Char('j')
+                if self.ui.detail_view == DetailView::Changes
+                    && self.ui.focus == crate::terminal::application::Focus::Flow =>
+            {
+                self.ui.update(Message::SelectNextChange {
+                    last: self.changes.len().saturating_sub(1),
+                });
+                self.reload_change_diff();
+            }
+            KeyCode::PageUp
+                if self.ui.detail_view == DetailView::Changes
+                    && self.ui.focus == crate::terminal::application::Focus::Flow =>
+            {
+                self.ui.update(Message::ScrollChangeDiff(-10));
+            }
+            KeyCode::PageDown
+                if self.ui.detail_view == DetailView::Changes
+                    && self.ui.focus == crate::terminal::application::Focus::Flow =>
+            {
+                self.ui.update(Message::ScrollChangeDiff(10));
+            }
             KeyCode::Up => self.scroll(-1),
             KeyCode::Down => self.scroll(1),
             KeyCode::PageUp => self.scroll(-10),
@@ -707,6 +802,7 @@ impl App {
         let result = handoff::run(terminal, &mut command);
         self.run = Some(self.repository.load(&run.id)?);
         self.reload_artifact()?;
+        self.refresh_working_tree_if_visible();
         result?;
         Ok(())
     }
@@ -736,6 +832,7 @@ impl App {
         let handoff_result = handoff::run(terminal, &mut command);
         self.run = Some(self.repository.load(&run.id)?);
         self.reload_artifact()?;
+        self.refresh_working_tree_if_visible();
         handoff_result?;
         Ok(())
     }
@@ -752,7 +849,12 @@ pub async fn run(config: UiConfig) -> Result<()> {
     let mut app = App::load(config)?;
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableBracketedPaste
+    )?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
@@ -771,7 +873,12 @@ async fn event_loop(
     loop {
         terminal.draw(|frame| draw(frame, app))?;
         tokio::select! {
-            event = input.next() => if let Some(event) = event { match event? { TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => if app.key(key.code, terminal).await? { break; }, TerminalEvent::Resize(_, _) => {}, _ => {} } },
+            event = input.next() => if let Some(event) = event { match event? {
+                TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => if app.key(key.code, terminal).await? { break; },
+                TerminalEvent::Paste(text) if matches!(app.ui.mode, Mode::Prompt(_)) => app.ui.update(Message::Paste(text)),
+                TerminalEvent::Resize(_, _) | TerminalEvent::Paste(_) => {},
+                _ => {}
+            } },
             event = next_agent_event(&mut app.running) => match event { Some(event) => app.accept_event(event)?, None => app.stream_closed()? },
             _ = tick.tick() => app.ui.update(Message::Tick),
         }
@@ -815,6 +922,14 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
                 focus: app.ui.focus,
                 spinner: app.ui.spinner,
                 activity: &app.agent_activity,
+                detail_view: app.ui.detail_view,
+                working_tree: flow::WorkingTreeView {
+                    changes: &app.changes,
+                    selected: app.ui.change_selected,
+                    diff: &app.change_diff,
+                    scroll: app.ui.change_scroll,
+                    error: app.working_tree_error.as_deref(),
+                },
             },
         );
         channel::render(
@@ -831,6 +946,7 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
         help::HelpView {
             mode: &app.ui.mode,
             prompt_edit_mode: app.ui.prompt_edit_mode,
+            detail_view: app.ui.detail_view,
             status: app
                 .run
                 .as_ref()

@@ -84,6 +84,12 @@ pub enum Focus {
     Channel,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetailView {
+    Artifact,
+    Changes,
+}
+
 impl Focus {
     pub fn next(self) -> Self {
         match self {
@@ -101,6 +107,9 @@ pub struct Model {
     pub viewed_node: usize,
     pub flow_scroll: u16,
     pub channel_scroll: u16,
+    pub detail_view: DetailView,
+    pub change_selected: usize,
+    pub change_scroll: u16,
     pub prompt: String,
     pub prompt_edit_mode: PromptEditMode,
     prompt_cursor: usize,
@@ -121,6 +130,9 @@ impl Default for Model {
             viewed_node: 0,
             flow_scroll: 0,
             channel_scroll: 0,
+            detail_view: DetailView::Artifact,
+            change_selected: 0,
+            change_scroll: 0,
             prompt: String::new(),
             prompt_edit_mode: PromptEditMode::Normal,
             prompt_cursor: 0,
@@ -138,6 +150,12 @@ impl Default for Model {
 pub enum Message {
     Tick,
     ToggleFocus,
+    ToggleDetailView,
+    SelectPreviousChange,
+    SelectNextChange {
+        last: usize,
+    },
+    ScrollChangeDiff(i16),
     Scroll(i16),
     SelectPrevious,
     SelectNext {
@@ -154,6 +172,7 @@ pub enum Message {
     OpenPromptLineAbove,
     OpenPromptLineBelow,
     Input(char),
+    Paste(String),
     Backspace,
     DeletePromptCharacter,
     DeletePromptToLineEnd,
@@ -252,6 +271,9 @@ impl Model {
         self.focus = Focus::Flow;
         self.flow_scroll = 0;
         self.channel_scroll = 0;
+        self.detail_view = DetailView::Artifact;
+        self.change_selected = 0;
+        self.change_scroll = 0;
         self.viewed_node = 0;
         self.prompt.clear();
         self.prompt_edit_mode = PromptEditMode::Normal;
@@ -309,6 +331,28 @@ impl Model {
         match message {
             Message::Tick => self.spinner = (self.spinner + 1) % 4,
             Message::ToggleFocus => self.focus = self.focus.next(),
+            Message::ToggleDetailView => {
+                self.detail_view = match self.detail_view {
+                    DetailView::Artifact => DetailView::Changes,
+                    DetailView::Changes => DetailView::Artifact,
+                };
+                self.change_scroll = 0;
+            }
+            Message::SelectPreviousChange => {
+                self.change_selected = self.change_selected.saturating_sub(1);
+                self.change_scroll = 0;
+            }
+            Message::SelectNextChange { last } => {
+                self.change_selected = (self.change_selected + 1).min(last);
+                self.change_scroll = 0;
+            }
+            Message::ScrollChangeDiff(delta) => {
+                self.change_scroll = if delta < 0 {
+                    self.change_scroll.saturating_sub(delta.unsigned_abs())
+                } else {
+                    self.change_scroll.saturating_add(delta as u16)
+                };
+            }
             Message::Scroll(delta) => match self.focus {
                 Focus::Flow => {
                     self.flow_scroll = if delta < 0 {
@@ -359,6 +403,12 @@ impl Model {
                 self.prompt_preferred_column = None;
             }
             Message::Input(_) => {}
+            Message::Paste(text) if self.prompt_edit_mode == PromptEditMode::Insert => {
+                self.prompt.insert_str(self.prompt_cursor, &text);
+                self.prompt_cursor += text.len();
+                self.prompt_preferred_column = None;
+            }
+            Message::Paste(_) => {}
             Message::Backspace if self.prompt_edit_mode == PromptEditMode::Insert => {
                 if let Some((previous, _)) =
                     self.prompt[..self.prompt_cursor].char_indices().next_back()
@@ -768,9 +818,28 @@ fn prompt_word_text_object_range(
 #[cfg(test)]
 mod tests {
     use super::{
-        Action, Focus, Message, Mode, Model, PromptEditMode, PromptKind, PromptOperator,
-        PromptTextObject, PromptWordStyle, SubmittedPrompt,
+        Action, DetailView, Focus, Message, Mode, Model, PromptEditMode, PromptKind,
+        PromptOperator, PromptTextObject, PromptWordStyle, SubmittedPrompt,
     };
+
+    #[test]
+    fn changes_view_navigation_selects_files_and_scrolls_the_diff() {
+        let mut model = Model::default();
+
+        model.update(Message::ToggleDetailView);
+        model.update(Message::SelectNextChange { last: 2 });
+        model.update(Message::ScrollChangeDiff(10));
+        model.update(Message::SelectPreviousChange);
+
+        assert_eq!(
+            (
+                model.detail_view,
+                model.change_selected,
+                model.change_scroll
+            ),
+            (DetailView::Changes, 0, 0)
+        );
+    }
 
     fn model_with_prompt(prompt: &str, cursor: usize) -> Model {
         Model {
@@ -860,6 +929,24 @@ mod tests {
         assert_eq!(
             (model.mode, model.prompt),
             (Mode::Prompt(PromptKind::Initial), "é".into())
+        );
+    }
+
+    #[test]
+    fn prompt_paste_inserts_multiline_unicode_text_without_submitting() {
+        let mut model = Model::default();
+        model.open_prompt(PromptKind::Revision);
+        model.update(Message::EnterPromptInsertMode);
+
+        model.update(Message::Paste("first line\nweb 🦀 text".into()));
+
+        assert_eq!(
+            (&model.mode, model.prompt.as_str(), model.prompt_cursor(),),
+            (
+                &Mode::Prompt(PromptKind::Revision),
+                "first line\nweb 🦀 text",
+                "first line\nweb 🦀 text".len(),
+            )
         );
     }
 

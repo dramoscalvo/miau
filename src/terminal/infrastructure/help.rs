@@ -3,7 +3,7 @@
 use crate::{
     runs::domain::NodeStatus,
     terminal::application::{
-        Action, Mode, PromptEditMode, PromptKind, prompt_cursor_position, prompt_rows,
+        Action, DetailView, Mode, PromptEditMode, PromptKind, prompt_cursor_position, prompt_rows,
     },
 };
 use ratatui::{
@@ -86,6 +86,7 @@ fn gate_text(
 pub struct HelpView<'a> {
     pub mode: &'a Mode,
     pub prompt_edit_mode: PromptEditMode,
+    pub detail_view: DetailView,
     pub status: Option<NodeStatus>,
     pub is_current: bool,
     pub can_prompt: bool,
@@ -100,6 +101,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
     let HelpView {
         mode,
         prompt_edit_mode,
+        detail_view,
         status,
         is_current,
         can_prompt,
@@ -159,13 +161,20 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
     let text = if let Some(error) = error {
         Line::from(format!("error: {error}").red().bold())
     } else {
-        let hints = match mode {
+        let mut hints = match mode {
             Mode::RunList => "enter open · n new · q quit".into(),
             Mode::Streaming => "←/→ agents · tab pane · ↑↓ scroll · x stop · q quit".into(),
             Mode::Gate => gate_text(status, is_current, can_prompt, can_discuss, can_finish),
             Mode::Prompt(_) => String::new(),
             Mode::Confirm(action) => confirmation_text(action).into(),
         };
+        if !matches!(mode, Mode::RunList | Mode::Confirm(_)) {
+            let view_hints = match detail_view {
+                DetailView::Artifact => "v changes",
+                DetailView::Changes => "v artifact · j/k files · PgUp/PgDn diff",
+            };
+            hints = format!("{view_hints} · {hints}");
+        }
         hint_line(&hints)
     };
     frame.render_widget(Paragraph::new(text), area);
@@ -175,7 +184,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
 mod tests {
     use super::{confirmation_text, gate_text};
     use crate::runs::domain::NodeStatus;
-    use crate::terminal::application::{Action, Mode, PromptEditMode, PromptKind, prompt_rows};
+    use crate::terminal::application::{
+        Action, DetailView, Mode, PromptEditMode, PromptKind, prompt_rows,
+    };
     use ratatui::{Terminal, backend::TestBackend, style::Color};
 
     #[test]
@@ -192,6 +203,7 @@ mod tests {
                     super::HelpView {
                         mode: &mode,
                         prompt_edit_mode: PromptEditMode::Normal,
+                        detail_view: DetailView::Artifact,
                         status: None,
                         is_current: false,
                         can_prompt: false,
@@ -274,6 +286,7 @@ mod tests {
                     super::HelpView {
                         mode: &mode,
                         prompt_edit_mode: PromptEditMode::Normal,
+                        detail_view: DetailView::Artifact,
                         status: None,
                         is_current: false,
                         can_prompt: false,

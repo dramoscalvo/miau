@@ -1,7 +1,7 @@
 //! Safe terminal suspension and restoration around interactive children.
 
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
+    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -26,7 +26,8 @@ pub fn run(
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
+        DisableMouseCapture,
+        DisableBracketedPaste
     )?;
     terminal.show_cursor()?;
     let child_result = command
@@ -46,7 +47,8 @@ pub fn restore(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<
     execute!(
         terminal.backend_mut(),
         EnterAlternateScreen,
-        EnableMouseCapture
+        EnableMouseCapture,
+        EnableBracketedPaste
     )?;
     terminal.clear()
 }
@@ -54,5 +56,10 @@ pub fn restore(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<
 pub fn restore_stdio() {
     let _ = disable_raw_mode();
     let mut stdout = io::stdout();
-    let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+    let _ = execute!(
+        stdout,
+        LeaveAlternateScreen,
+        DisableMouseCapture,
+        DisableBracketedPaste
+    );
 }

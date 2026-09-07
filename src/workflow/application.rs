@@ -6,8 +6,10 @@ use crate::{
         application::{ArtifactRepository, RepositoryError, RunRepository, TextRepository},
         domain::{ChannelEntry, Decision, NodeStatus, Run},
     },
+    workflow::domain::WorkingTreeChange,
 };
 use std::{
+    io,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -15,6 +17,12 @@ use thiserror::Error;
 
 const MINIMAL_IMPLEMENTATION_GUIDANCE: &str =
     "Look for the minimal implementation needed to achieve the goal.";
+
+pub trait WorkingTreeRepository {
+    fn changes(&self, project: &Path) -> io::Result<Vec<WorkingTreeChange>>;
+
+    fn diff(&self, project: &Path, change: &WorkingTreeChange) -> io::Result<String>;
+}
 
 #[derive(Debug, Error)]
 pub enum OrchestratorError {
