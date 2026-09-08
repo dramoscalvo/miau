@@ -301,3 +301,13 @@ view keeps a 3/4–1/4 flow/activity ratio. The initial run list uses a 2/3–1/
 split so its selected-run summary remains readable. These presentation choices
 can evolve without changing domain policy; `--runs` already overrides the run
 location.
+
+## License
+
+Copyright (C) 2026 David Ramos Calvo.
+
+miau is free software: you can redistribute it and/or modify it under the terms
+of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version.
+
+See [LICENSE](LICENSE) for the full license text.
