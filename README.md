@@ -136,6 +136,21 @@ writes = "implementation.md"
 Role files are plain Markdown instructions named after the workflow role, such
 as `roles/planner.md` for `role = "planner"`.
 
+Each agent returns one Markdown artifact with `# Review` and `# Handoff`
+sections. Review targets one screen: goal, decisions/risks, a proposed or observed
+A/M/D/R file tree, short Given/When/Then cases with stable IDs, and verification
+results. Handoff adds only technical constraints, evidence paths, unresolved
+issues, and the next task. Unchanged cases and upstream plans are referenced
+instead of copied. This output contract is built into prompt assembly, so it
+also applies to existing user role files without overwriting them.
+
+Later agents receive an index of completed upstream artifact paths, using their
+current versions, plus a feedback reference when revisiting a step. They are
+instructed to read relevant artifacts from disk, including the plan before
+implementation or review. Reports and transcripts are not embedded in the
+handoff prompt. Referenced file reads still consume tokens; savings depend on
+which material the agent needs. No additional summary model call is made.
+
 `session_group` is optional. A node with a group resumes the latest captured
 session from an earlier node that has both the same group and the same configured
 agent. Nodes without it start a fresh session, and re-running a node still
@@ -204,8 +219,16 @@ while preserving the results of later steps, which will be offered again in
 order. Press `d` to open that agent's captured session interactively without
 changing workflow state.
 
-Press `v` from a project screen to switch the detail area between the selected
-agent's artifact and the project's live Git working tree. The tree marks added
+The project detail area starts with the selected agent's compact Review section.
+Press `v` to cycle through Review, the full artifact (including Handoff), and
+the project's live Git working tree. Use Up/Down or Page Up/Page Down to scroll
+review/artifact text when it exceeds the pane. Old or incomplete artifacts
+without the two headings fall back to their full text. Editing still opens the
+single canonical artifact, and the preview reloads after the editor returns.
+The one-screen target is guidance, not a truncation or approval rule; diagrams
+and Gherkin are displayed as text, and scenarios are not automatically executed.
+
+The live Git tree marks added
 files in green, modified files in yellow, deleted files in red, and renamed
 files in cyan. Use `j`/`k` or Up/Down to select a file and Page Up/Page Down to
 scroll its unified diff. This view reports all current working-tree changes,

@@ -6,7 +6,7 @@ use super::pane;
 use crate::{
     execution::application::AgentConfig,
     runs::domain::{Node, NodeStatus, Run},
-    terminal::application::{DetailView, Focus},
+    terminal::application::{DetailView, Focus, artifact_review},
     workflow::domain::{WorkingTreeChange, WorkingTreeChangeKind},
 };
 use chrono::{DateTime, Utc};
@@ -441,12 +441,24 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
         render_working_tree(frame, artifact_area, working_tree, focus);
         return;
     }
+    let review = (detail_view == DetailView::Review && !show_agent_output)
+        .then(|| artifact_review(artifact))
+        .flatten();
     let text = if show_agent_output {
         stream.join("\n")
     } else {
-        artifact.to_owned()
+        review.unwrap_or(artifact).to_owned()
     };
-    let title = detail_title(status, viewing_complete, activity, spinner);
+    let title = if review.is_some() {
+        format!(
+            " Review · {} · v full artifact · PgDn more ",
+            status.map_or("", |status| node_status_label(status, viewing_complete))
+        )
+    } else if detail_view == DetailView::Review && !show_agent_output && !artifact.is_empty() {
+        " Full artifact · no compact review · PgDn more ".into()
+    } else {
+        detail_title(status, viewing_complete, activity, spinner)
+    };
     let scroll = if show_agent_output {
         streaming_scroll(&text, artifact_area)
     } else {
@@ -810,6 +822,27 @@ mod tests {
             .unwrap();
 
         assert!(buffer_text(&terminal).contains("No runs yet — press n to create one"));
+    }
+
+    #[test]
+    fn review_view_hides_handoff_but_full_artifact_keeps_it_accessible() {
+        let run = run_with_status(NodeStatus::Done);
+        let mut terminal = Terminal::new(TestBackend::new(90, 28)).unwrap();
+        for (detail_view, show_handoff) in
+            [(DetailView::Review, false), (DetailView::Artifact, true)]
+        {
+            terminal.draw(|frame| {
+                render(frame, frame.area(), FlowView {
+                    run: Some(&run), viewed_node: 0,
+                    artifact: "# Review\nGoal: compact review\n\n# Handoff\nTechnical evidence",
+                    stream: &[], scroll: 0, focus: Focus::Flow, spinner: 0,
+                    activity: "", detail_view, working_tree: WorkingTreeView::empty(),
+                });
+            }).unwrap();
+            let text = buffer_text(&terminal);
+            assert!(text.contains("Goal: compact review"));
+            assert_eq!(text.contains("Technical evidence"), show_handoff);
+        }
     }
 
     #[test]

@@ -24,6 +24,15 @@ Working-tree inspection is exposed through the workflow application's
 in workflow infrastructure, while the terminal consumes only normalized change
 kinds and paths.
 
+Agent output uses one Markdown artifact with a human `# Review` section and an
+additional `# Handoff` section. Workflow prompt assembly includes the output
+contract and an index of current completed upstream artifact paths, plus any
+following revision feedback. It does not inline those reports. Agents must read
+relevant files from disk even when resuming a session; missing required inputs
+must be reported. The terminal extracts Review for display only, preserving the
+full artifact for editing and legacy-output fallback. Neither section controls
+approval, and length targets are advisory so findings are never discarded.
+
 Workflow nodes may opt into a named session group. At process start, the
 orchestrator selects only the newest captured session from an earlier node with
 the same group and configured agent. The session ID remains part of persisted

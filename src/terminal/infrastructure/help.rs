@@ -170,8 +170,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         };
         if !matches!(mode, Mode::RunList | Mode::Confirm(_)) {
             let view_hints = match detail_view {
+                DetailView::Review => "v full artifact · PgUp/PgDn review",
                 DetailView::Artifact => "v changes",
-                DetailView::Changes => "v artifact · j/k files · PgUp/PgDn diff",
+                DetailView::Changes => "v review · j/k files · PgUp/PgDn diff",
             };
             hints = format!("{view_hints} · {hints}");
         }

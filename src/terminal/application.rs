@@ -86,8 +86,40 @@ pub enum Focus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetailView {
+    Review,
     Artifact,
     Changes,
+}
+
+/// Extract the human section without interpreting headings inside code fences.
+/// Unrecognized or incomplete artifacts remain available in full as a fallback.
+pub fn artifact_review(artifact: &str) -> Option<&str> {
+    let artifact = artifact.trim_start();
+    let (heading, body) = artifact.split_once('\n')?;
+    if heading.trim_end() != "# Review" {
+        return None;
+    }
+    let mut fence = None;
+    let mut offset = 0;
+    for line in body.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if let Some((marker, length)) = fence {
+            let count = trimmed.chars().take_while(|ch| *ch == marker).count();
+            if count >= length && trimmed.chars().skip(count).all(char::is_whitespace) {
+                fence = None;
+            }
+        } else if trimmed == "# Handoff" {
+            let review = body.get(..offset)?.trim();
+            return (!review.is_empty()).then_some(review);
+        } else if let Some(marker @ ('`' | '~')) = trimmed.chars().next() {
+            let length = trimmed.chars().take_while(|ch| *ch == marker).count();
+            if length >= 3 {
+                fence = Some((marker, length));
+            }
+        }
+        offset += line.len();
+    }
+    None
 }
 
 impl Focus {
@@ -130,7 +162,7 @@ impl Default for Model {
             viewed_node: 0,
             flow_scroll: 0,
             channel_scroll: 0,
-            detail_view: DetailView::Artifact,
+            detail_view: DetailView::Review,
             change_selected: 0,
             change_scroll: 0,
             prompt: String::new(),
@@ -271,7 +303,7 @@ impl Model {
         self.focus = Focus::Flow;
         self.flow_scroll = 0;
         self.channel_scroll = 0;
-        self.detail_view = DetailView::Artifact;
+        self.detail_view = DetailView::Review;
         self.change_selected = 0;
         self.change_scroll = 0;
         self.viewed_node = 0;
@@ -333,9 +365,11 @@ impl Model {
             Message::ToggleFocus => self.focus = self.focus.next(),
             Message::ToggleDetailView => {
                 self.detail_view = match self.detail_view {
+                    DetailView::Review => DetailView::Artifact,
                     DetailView::Artifact => DetailView::Changes,
-                    DetailView::Changes => DetailView::Artifact,
+                    DetailView::Changes => DetailView::Review,
                 };
+                self.flow_scroll = 0;
                 self.change_scroll = 0;
             }
             Message::SelectPreviousChange => {
@@ -823,9 +857,46 @@ mod tests {
     };
 
     #[test]
+    fn review_view_cycles_through_full_artifact_and_changes() {
+        let mut model = Model::default();
+        assert_eq!(model.detail_view, DetailView::Review);
+        model.flow_scroll = 10;
+        model.update(Message::ToggleDetailView);
+        assert_eq!(
+            (model.detail_view, model.flow_scroll),
+            (DetailView::Artifact, 0)
+        );
+        model.update(Message::ToggleDetailView);
+        assert_eq!(model.detail_view, DetailView::Changes);
+        model.update(Message::ToggleDetailView);
+        assert_eq!(model.detail_view, DetailView::Review);
+    }
+
+    #[test]
+    fn review_extracts_only_human_section_with_unicode_and_fenced_headings() {
+        let artifact = "# Review\n\nGoal: café 猫\n```text\n# Handoff\n```\nDecision: none\n\n# Handoff\nRead src/lib.rs\n";
+        assert_eq!(
+            super::artifact_review(artifact),
+            Some("Goal: café 猫\n```text\n# Handoff\n```\nDecision: none")
+        );
+    }
+
+    #[test]
+    fn review_falls_back_for_legacy_or_incomplete_artifacts() {
+        for artifact in [
+            "Old report",
+            "# Review\nPartial output",
+            "# Review\n\n# Handoff\nNotes",
+        ] {
+            assert_eq!(super::artifact_review(artifact), None);
+        }
+    }
+
+    #[test]
     fn changes_view_navigation_selects_files_and_scrolls_the_diff() {
         let mut model = Model::default();
 
+        model.update(Message::ToggleDetailView);
         model.update(Message::ToggleDetailView);
         model.update(Message::SelectNextChange { last: 2 });
         model.update(Message::ScrollChangeDiff(10));

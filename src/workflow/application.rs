@@ -76,21 +76,28 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
                     .get(run.cursor.saturating_add(1))
                     .filter(|node| node.status == NodeStatus::Done)
             });
-        let previous = run
-            .cursor
-            .checked_sub(1)
-            .and_then(|index| run.nodes.get(index));
-        let input = feedback
-            .or(previous)
-            .map(|previous| {
-                let path = self.repository.path(&run.id, &previous.writes)?;
-                let text = self.repository.read(&run.id, &previous.writes)?;
-                Ok::<_, RepositoryError>(format!("{}\n{}", path.display(), text))
-            })
-            .transpose()?
-            .unwrap_or_else(|| "(none)".to_owned());
+        let mut inputs = Vec::new();
+        for upstream in run.nodes.iter().take(run.cursor) {
+            if upstream.status == NodeStatus::Done {
+                let path = self.repository.path(&run.id, &upstream.writes)?;
+                inputs.push(format!("- {}: {}", upstream.name, path.display()));
+            }
+        }
+        if let Some(feedback) = feedback {
+            let path = self.repository.path(&run.id, &feedback.writes)?;
+            inputs.push(format!(
+                "- Revision feedback (not approval): {}",
+                path.display()
+            ));
+        }
+        let input = if inputs.is_empty() {
+            "(none)".to_owned()
+        } else {
+            inputs.join("\n")
+        };
+        let contract = include_str!("artifact-contract.md");
         Ok(format!(
-            "# Task\n{role}\n\n# Spec\n{spec}\n\n# Input artifact\n{input}\n\n# Human note\n{}\n\n# Working directory\n{}\n",
+            "# Task\n{role}\n\n# Spec\n{spec}\n\n# Upstream artifacts\n{input}\n\nRead the current files from disk, even in a resumed session. Read the plan and acceptance cases before implementation or review, plus relevant critique or revision feedback. Resolve supporting references selectively; do not rediscover or copy entire reports. If a required artifact is missing, report it instead of guessing.\n\n# Human note\n{}\n\n# Working directory\n{}\n\n# Output contract\n{contract}",
             note.unwrap_or("(none)"),
             run.project.display()
         ))
@@ -384,7 +391,7 @@ mod tests {
         }
     }
     #[test]
-    fn prompt_uses_canonical_artifact_not_memory() {
+    fn prompt_references_canonical_artifact_without_embedding_report() {
         let root = std::env::temp_dir().join(format!("miau-prompt-{}", std::process::id()));
         fs::create_dir_all(root.join("roles")).unwrap();
         fs::write(root.join("roles/critic.md"), "Find risks; do not decide.").unwrap();
@@ -393,7 +400,9 @@ mod tests {
         let prompt = Orchestrator::new(repo, root.join("roles"))
             .assemble_prompt(&fixture(&root), Some("focus on data"))
             .unwrap();
-        assert!(prompt.contains("edited on disk"));
+        assert!(!prompt.contains("edited on disk"));
+        assert!(prompt.contains("runs/001/plan.md"));
+        assert!(prompt.contains("Read the current files from disk"));
         assert!(prompt.contains("focus on data"));
         let _ = fs::remove_dir_all(root);
     }
@@ -547,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn revisited_node_prompt_reads_following_completed_artifact_from_disk() {
+    fn revisited_node_prompt_references_following_completed_feedback() {
         let root = std::env::temp_dir().join(format!("miau-feedback-{}", std::process::id()));
         fs::create_dir_all(root.join("roles")).unwrap();
         fs::write(root.join("roles/planner.md"), "Revise the plan.").unwrap();
@@ -564,7 +573,37 @@ mod tests {
             .assemble_prompt(&run, None)
             .unwrap();
 
-        assert!(prompt.contains("canonical critique"));
+        assert!(!prompt.contains("canonical critique"));
+        assert!(prompt.contains("Revision feedback"));
+        assert!(prompt.contains("runs/001/critique.md"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn implementation_prompt_keeps_versioned_plan_reference_beyond_critique() {
+        let root = std::env::temp_dir().join(format!("miau-handoff-{}", std::process::id()));
+        fs::create_dir_all(root.join("roles")).unwrap();
+        fs::write(root.join("roles/implementer.md"), "Implement.").unwrap();
+        let repo = FileRepository::new(root.join("runs"));
+        let mut run = fixture(&root);
+        run.nodes[0].writes = "plan_v2.md".into();
+        run.nodes[1].status = NodeStatus::Done;
+        let mut implement = run.nodes[1].clone();
+        implement.name = "implement".into();
+        implement.role = "implementer".into();
+        implement.writes = "implementation.md".into();
+        implement.status = NodeStatus::Pending;
+        run.nodes.push(implement);
+        run.cursor = 2;
+
+        let prompt = Orchestrator::new(repo, root.join("roles"))
+            .assemble_prompt(&run, None)
+            .unwrap();
+
+        assert!(prompt.contains("runs/001/plan_v2.md"));
+        assert!(prompt.contains("runs/001/critique.md"));
+        assert!(!prompt.contains("runs/001/implementation.md"));
+        assert!(prompt.contains("# Review") && prompt.contains("# Handoff"));
         let _ = fs::remove_dir_all(root);
     }
 
