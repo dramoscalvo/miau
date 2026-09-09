@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="550" viewBox="0 0 800 550" role="img" aria-labelledby="title desc">
+  <title id="title">miau: inspect the artifact</title>
+  <desc id="desc">An illustrative plan review shows its goal, proposed file changes, a scenario, and verification status, followed by human decision controls.</desc>
+  <rect width="800" height="550" fill="#131019"/><rect width="800" height="43" fill="#2a2035"/>
+  <g font-family="monospace" font-size="14" fill="#c5b9d1"><text x="22" y="28">miau / plan.md</text><text x="663" y="28">REVIEW VIEW</text></g>
+  <rect x="22" y="65" width="756" height="404" fill="none" stroke="#655170"/>
+  <rect x="36" y="56" width="322" height="20" fill="#131019"/>
+  <g font-family="monospace" font-size="16">
+    <text x="44" y="71" fill="#ebf68b">Artifact · waiting for you</text>
+    <text x="44" y="111" fill="#f796d5" font-weight="bold"># Review</text>
+    <text x="44" y="151" fill="#ebf68b">Goal</text><text x="44" y="181" fill="#eee8f4">Add a confirmation before activating the drive.</text>
+    <text x="44" y="225" fill="#ebf68b">Proposed changes</text>
+    <text x="44" y="256" fill="#83ddd6">A  src/confirmation.rs</text><text x="44" y="284" fill="#ebf68b">M  src/main.rs</text>
+    <text x="44" y="328" fill="#ebf68b">CONFIRM-01</text><text x="44" y="358" fill="#eee8f4">Given the drive is ready</text><text x="44" y="384" fill="#eee8f4">When the operator cancels</text><text x="44" y="410" fill="#eee8f4">Then the drive remains idle</text>
+    <text x="44" y="446" fill="#b6aec5" font-size="14">Verification: proposed test, not yet run.</text>
+    <text x="26" y="503" fill="#ebf68b">a</text><text x="46" y="503" fill="#eee8f4">approve</text><text x="168" y="503" fill="#ebf68b">e</text><text x="188" y="503" fill="#eee8f4">edit</text><text x="280" y="503" fill="#ebf68b">d</text><text x="300" y="503" fill="#eee8f4">discuss</text><text x="422" y="503" fill="#ebf68b">p</text><text x="442" y="503" fill="#eee8f4">revise</text>
+    <text x="26" y="531" fill="#b6aec5" font-size="12">v  cycle review / full artifact / live Git tree</text>
+  </g>
+</svg>

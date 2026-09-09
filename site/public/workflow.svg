@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="600" viewBox="0 0 880 600" role="img" aria-labelledby="title desc">
+  <title id="title">miau: a human decision gate</title>
+  <desc id="desc">An illustrative terminal screen. The plan is waiting for approval, editing, or discussion. The following three steps remain ready.</desc>
+  <rect width="880" height="600" fill="#131019"/>
+  <rect width="880" height="46" fill="#2a2035"/>
+  <g fill="#c3b2d4"><circle cx="25" cy="23" r="5"/><circle cx="45" cy="23" r="5"/><circle cx="65" cy="23" r="5"/></g>
+  <g font-family="monospace" font-size="15" fill="#c5b9d1"><text x="334" y="29">miau — improbability-drive</text><text x="839" y="29">×</text></g>
+  <g font-family="monospace" font-size="16">
+    <text x="28" y="84" fill="#ebf68b" font-size="24" font-weight="bold">miau_</text>
+    <text x="610" y="81" fill="#b6aec5">project / example</text>
+    <rect x="24" y="106" width="832" height="195" fill="none" stroke="#655170"/>
+    <rect x="38" y="98" width="112" height="20" fill="#131019"/>
+    <text x="46" y="113" fill="#f796d5">Workflow</text>
+    <rect x="37" y="128" width="806" height="36" fill="#33283a"/>
+    <text x="48" y="152" fill="#ebf68b">&gt; 1  plan</text><text x="295" y="152" fill="#eee8f4">claude</text><text x="610" y="152" fill="#ebf68b">Waiting for you</text>
+    <text x="48" y="193" fill="#b6aec5">  2  critique</text><text x="295" y="193" fill="#b6aec5">codex</text><text x="610" y="193" fill="#b6aec5">Ready</text>
+    <text x="48" y="234" fill="#b6aec5">  3  implement</text><text x="295" y="234" fill="#b6aec5">codex</text><text x="610" y="234" fill="#b6aec5">Ready</text>
+    <text x="48" y="275" fill="#b6aec5">  4  review</text><text x="295" y="275" fill="#b6aec5">claude</text><text x="610" y="275" fill="#b6aec5">Ready</text>
+    <rect x="24" y="325" width="600" height="176" fill="none" stroke="#655170"/>
+    <rect x="38" y="317" width="100" height="20" fill="#131019"/><text x="46" y="332" fill="#f796d5">Review</text>
+    <text x="44" y="369" fill="#ebf68b"># Goal</text><text x="44" y="399" fill="#eee8f4">Make the drive slightly less improbable.</text>
+    <text x="44" y="439" fill="#83ddd6">Artifact: plan.md</text><text x="44" y="472" fill="#b6aec5">Read the plan. Decide what happens next.</text>
+    <rect x="640" y="325" width="216" height="176" fill="none" stroke="#655170"/>
+    <rect x="654" y="317" width="108" height="20" fill="#131019"/><text x="662" y="332" fill="#f796d5">Activity</text>
+    <text x="656" y="369" fill="#b6aec5" font-size="14">plan started</text><text x="656" y="399" fill="#b6aec5" font-size="14">artifact saved</text><text x="656" y="439" fill="#ebf68b" font-size="14">Waiting for you</text>
+    <text x="28" y="540" fill="#ebf68b">a</text><text x="49" y="540" fill="#eee8f4">approve</text><text x="177" y="540" fill="#ebf68b">e</text><text x="198" y="540" fill="#eee8f4">edit</text><text x="300" y="540" fill="#ebf68b">d</text><text x="321" y="540" fill="#eee8f4">discuss</text><text x="453" y="540" fill="#ebf68b">p</text><text x="474" y="540" fill="#eee8f4">revise</text>
+    <text x="28" y="577" fill="#b6aec5" font-size="13">One agent at a time. One human at every decision gate.</text>
+  </g>
+</svg>

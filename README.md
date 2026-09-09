@@ -257,6 +257,9 @@ gate.
 
 ## Development
 
+The Astro landing page lives in [`site/`](site/README.md), with local preview,
+verification, and GitHub Pages publishing instructions in its README.
+
 Run directly from the repository with:
 
 ```sh

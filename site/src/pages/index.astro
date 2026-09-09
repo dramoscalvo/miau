@@ -1,0 +1,115 @@
+---
+import '../styles/global.css';
+import '@fontsource/space-grotesk/latin-400.css';
+import '@fontsource/space-grotesk/latin-500.css';
+import '@fontsource/space-grotesk/latin-700.css';
+import '@fontsource/space-mono/latin-400.css';
+import '@fontsource/space-mono/latin-700.css';
+
+const repo = 'https://github.com/dramoscalvo/miau';
+const asset = (name: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${name}`;
+const steps = [
+  { number: '01', name: 'Plan', agent: 'Claude Code', text: 'Decide what ought to happen before anything has the opportunity to happen.' },
+  { number: '02', name: 'Critique', agent: 'Codex', text: 'Invite a second opinion. Preferably before the first opinion becomes several hundred lines of code.' },
+  { number: '03', name: 'Implement', agent: 'Codex', text: 'Turn the agreed plan into working changes. One agent, one task, a reassuring lack of stampede.' },
+  { number: '04', name: 'Review', agent: 'Claude Code', text: 'Inspect the result. Check the evidence. Decide whether the universe is marginally better off.' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#100e19" />
+    <meta name="description" content="miau is a human-gated terminal orchestrator for Claude Code and Codex. Plan, critique, implement, and review. You make the decisions." />
+    <meta property="og:title" content="miau — Machines work. Humans decide." />
+    <meta property="og:description" content="A small terminal orchestrator for coding agents and the humans nominally in charge." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://dramoscalvo.github.io/miau/" />
+    <link rel="canonical" href="https://dramoscalvo.github.io/miau/" />
+    <link rel="icon" type="image/svg+xml" href={asset('cat.svg')} />
+    <title>miau — Machines work. Humans decide.</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="#hero-title" aria-label="miau home">
+          <svg viewBox="0 0 32 28" width="32" height="28" aria-hidden="true"><path d="M2 2h6v4h16V2h6v22h-6v4H8v-4H2Z" fill="currentColor"/><path d="M8 12h4v4H8zm12 0h4v4h-4zm-6 8h4v4h-4z" fill="#100e19"/></svg>
+          miau<span class="brand-cursor">_</span>
+        </a>
+        <nav aria-label="Main navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#contribute">Contribute</a>
+          <a class="nav-github" href={repo}>GitHub <span aria-hidden="true">↗</span></a>
+        </nav>
+      </header>
+
+      <main id="main">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="status-dot"></span> HUMAN INPUT REQUIRED</p>
+            <h1 id="hero-title">Machines work.<br />Humans <span>decide.</span></h1>
+            <p class="hero-description">A terminal orchestrator for coding agents<br class="desktop-break" /> and the humans nominally in charge.</p>
+            <p class="hero-aside">The machines have a plan. How reassuring.<br />Perhaps you should read it first.</p>
+            <div class="actions">
+              <a class="button button-primary" href="#get-started">Get started <span aria-hidden="true">↗</span></a>
+              <a class="text-link" href={repo}>Explore the source <span aria-hidden="true">↗</span></a>
+            </div>
+            <p class="hero-meta">RUST BUILT <span>/</span> TERMINAL NATIVE <span>/</span> GPL-3.0-OR-LATER</p>
+          </div>
+          <div class="hero-visual">
+            <div class="orbit-label" aria-hidden="true">FIG. 01 — THE HUMAN IS STILL HERE</div>
+            <figure class="terminal-figure hero-terminal">
+              <a href={asset('workflow.svg')} aria-label="Open the workflow illustration at full size"><img src={asset('workflow.svg')} width="880" height="600" alt="Illustrated miau workflow: the plan from Claude is waiting for human review, while critique, implementation, and review remain ready. Approve, edit, and discuss controls appear below." fetchpriority="high" /></a>
+              <figcaption>Illustrative terminal view · select image to enlarge</figcaption>
+            </figure>
+            <div class="human-stamp"><span aria-hidden="true">✳</span> AWAITING YOUR<br />EXCELLENT JUDGEMENT</div>
+          </div>
+        </section>
+
+        <div class="signal-strip" aria-label="Project principles">
+          <span><i aria-hidden="true">+</i> CLAUDE CODE &amp; CODEX</span>
+          <span><i aria-hidden="true">+</i> ONE AGENT AT A TIME</span>
+          <span><i aria-hidden="true">+</i> YOU AT EVERY GATE</span>
+          <span><i aria-hidden="true">+</i> ARTIFACTS ON DISK</span>
+        </div>
+
+        <section class="intro section" aria-labelledby="purpose-title">
+          <div><p class="eyebrow">00 / A MODEST PROPOSAL</p><h2 id="purpose-title">Less autopilot.<br />More <em>“hang on a minute.”</em></h2></div>
+          <div class="intro-copy"><p>miau gives your coding agents an orderly workflow. It assembles prompts, runs one external CLI at a time, and saves the results as files you can actually read.</p><p>Then it waits for you. Approve the work, edit the artifact, discuss it with the agent, or ask for another attempt. The goal is simple: useful automation with deliberate human decisions.</p><p class="aside">Civilisation has tried leaving things entirely to the machines. The printer is still a suspect.</p></div>
+        </section>
+
+        <section id="how-it-works" class="section workflow" aria-labelledby="workflow-title">
+          <div class="section-heading"><div><p class="eyebrow">01 / THE ORDER OF PROCEEDINGS</p><h2 id="workflow-title">Four steps. You hold the keys.</h2></div><p>The default workflow.<br />Customise it with TOML and Markdown.</p></div>
+          <ol class="steps">
+            {steps.map((step) => <li><div class="step-top"><span>{step.number}</span><span aria-hidden="true">↗</span></div><h3>{step.name}</h3><p class="agent-label">{step.agent}</p><p>{step.text}</p><div class="gate"><span aria-hidden="true">◇</span> HUMAN DECISION</div></li>)}
+          </ol>
+          <p class="workflow-note"><span aria-hidden="true">↳</span> Every step stops for your decision. The next agent does not get to wave itself through.</p>
+        </section>
+
+        <section class="section inspection" aria-labelledby="inspection-title">
+          <figure class="terminal-figure review-terminal">
+            <a href={asset('review.svg')} aria-label="Open the artifact review illustration at full size"><img src={asset('review.svg')} width="800" height="550" alt="Illustrated artifact review with the goal, proposed file changes, a Given/When/Then case, and verification status. Keyboard controls offer approval, editing, discussion, and a revision prompt." loading="lazy" /></a>
+            <figcaption>Illustrative artifact review · select image to enlarge</figcaption>
+          </figure>
+          <div class="inspection-copy"><p class="eyebrow">02 / TRUST, WITH THE RECEIPTS</p><h2 id="inspection-title">Read the work.<br />Raise an eyebrow.</h2><p>Review the goal, proposed changes, risks, and verification. Cycle through the review, the full artifact, and your project’s live Git changes, right in the terminal.</p><ul class="feature-list"><li><span>01</span><div><h3>Files, not folklore.</h3><p>Plans and reports live on disk. Later agents receive artifact paths so they can read the relevant work.</p></div></li><li><span>02</span><div><h3>Revisions with a memory.</h3><p>New attempts write numbered artifacts. Earlier outputs stay put, however embarrassing.</p></div></li><li><span>03</span><div><h3>A pause with a purpose.</h3><p>Edit in your editor, discuss in the agent CLI, then return to make the next decision.</p></div></li></ul></div>
+        </section>
+
+        <section id="get-started" class="section installation" aria-labelledby="install-title">
+          <div><p class="eyebrow">03 / SOME ASSEMBLY REQUIRED</p><h2 id="install-title">Bring a terminal.<br />And your judgement.</h2><p>You’ll need Rust and at least one installed, authenticated agent CLI: Claude Code or Codex. miau runs on Linux, macOS, and Windows.</p><a class="text-link" href={`${repo}#requirements`}>Read the setup guide <span aria-hidden="true">↗</span></a></div>
+          <div class="install-terminal"><div class="terminal-bar"><span>QUICK START</span><span aria-hidden="true">─ &nbsp; □ &nbsp; ×</span></div><pre aria-label="Installation commands"><code><span class="code-comment"># Fetch the small but opinionated machine</span>{'\n'}git clone https://github.com/dramoscalvo/miau.git{'\n'}cd miau{'\n'}cargo install --path . --locked{'\n\n'}<span class="code-comment"># Go to the project you want to work on</span>{'\n'}cd /path/to/your/project{'\n'}<span class="code-highlight">miau</span></code></pre><p>Press <kbd>n</kbd> to create a run, <kbd>p</kbd> to set its prompt, then <kbd>s</kbd> to start.</p></div>
+        </section>
+
+        <section id="contribute" class="section contribution" aria-labelledby="contribute-title">
+          <div class="contribution-header"><div><p class="eyebrow">04 / THE DEPARTMENT OF MAKING IT BETTER</p><h2 id="contribute-title">Your contribution<br />is most <em>improbably welcome.</em></h2></div><p>Small project. Open source. Plenty to improve.<br />You needn’t be a Rust wizard.<br />A well-described bug is a public service.</p></div>
+          <div class="contribution-links"><a href={`${repo}/issues/new?template=bug_report.md`}><span class="contribution-icon" aria-hidden="true">[ ! ]</span><h3>Report a wobble <span aria-hidden="true">↗</span></h3><p>Tell us what happened, what you expected, and how to summon it again.</p></a><a href={`${repo}/issues/new?template=feature_request.md`}><span class="contribution-icon" aria-hidden="true">[ ? ]</span><h3>Suggest a better way <span aria-hidden="true">↗</span></h3><p>Explain the problem and the smallest useful improvement. Grand manifestos optional.</p></a><a href={`${repo}/blob/main/AGENTS.md`}><span class="contribution-icon" aria-hidden="true">[ + ]</span><h3>Make a change <span aria-hidden="true">↗</span></h3><p>Read the contributor guide. Add a focused test, make it pass, run the checks, and open a pull request.</p></a></div>
+          <p class="contribution-footnote">Keep it human-gated. Keep it in the terminal. <a href={`${repo}/blob/main/docs/architecture.md`}>Meet the architecture <span aria-hidden="true">↗</span></a></p>
+        </section>
+      </main>
+      <footer><a class="brand" href="#hero-title">miau<span class="brand-cursor">_</span></a><p>A small machine for keeping humans in the loop.</p><div><a href={`${repo}/blob/main/LICENSE`}>GPL-3.0-or-later</a><a href={repo}>GitHub ↗</a></div><p class="footer-note">© 2026 David Ramos Calvo. The future is pending your approval.</p></footer>
+    </div>
+  </body>
+</html>
