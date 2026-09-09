@@ -1,0 +1,123 @@
+---
+import '../styles/global.css';
+import '@fontsource/space-grotesk/latin-400.css';
+import '@fontsource/space-grotesk/latin-500.css';
+import '@fontsource/space-grotesk/latin-700.css';
+import '@fontsource/space-mono/latin-400.css';
+import '@fontsource/space-mono/latin-700.css';
+
+import { getAbsoluteLocaleUrl, getRelativeLocaleUrl } from 'astro:i18n';
+import { messages, locales, type Locale } from '../i18n/messages';
+
+interface Props { locale: Locale }
+const { locale } = Astro.props;
+const t = messages[locale];
+const steps = t.steps;
+const repo = 'https://github.com/dramoscalvo/miau';
+const asset = (name: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${name}`;
+const canonical = getAbsoluteLocaleUrl(locale);
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#100e19" />
+    <meta name="description" content={t.seoDescription} />
+    <meta property="og:title" content={t.seoTitle} />
+    <meta property="og:description" content={t.socialDescription} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={locale === "es" ? "es_ES" : "en_GB"} />
+    <link rel="canonical" href={canonical} />
+    {locales.map((language) => <link rel="alternate" hreflang={language} href={getAbsoluteLocaleUrl(language)} />)}
+    <link rel="alternate" hreflang="x-default" href={getAbsoluteLocaleUrl('en')} />
+    <link rel="icon" type="image/svg+xml" href={asset('cat.svg')} />
+    <title>{t.seoTitle}</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{t.skip}</a>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="#hero-title" aria-label={t.home}>
+          <svg viewBox="0 0 32 28" width="32" height="28" aria-hidden="true"><path d="M2 2h6v4h16V2h6v22h-6v4H8v-4H2Z" fill="currentColor"/><path d="M8 12h4v4H8zm12 0h4v4h-4zm-6 8h4v4h-4z" fill="#100e19"/></svg>
+          miau<span class="brand-cursor">_</span>
+        </a>
+        <nav aria-label={t.navigation}>
+          <a href="#how-it-works">{t.how}</a>
+          <a href="#contribute">{t.contribute}</a>
+          <a class="nav-github" href={repo}>GitHub <span aria-hidden="true">↗</span></a>
+        </nav>
+        <nav class="language-switch" aria-label={t.language}>
+          {locales.map((language) => <a href={getRelativeLocaleUrl(language)} lang={language} hreflang={language} aria-current={language === locale ? 'page' : undefined}>{language === 'en' ? 'English' : 'Español'}</a>)}
+        </nav>
+      </header>
+
+      <main id="main">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="status-dot"></span> {t.humanRequired}</p>
+            <h1 id="hero-title">{t.heroFirst}<br />{t.heroSecond}<span>{t.heroEmphasis}</span></h1>
+            <p class="hero-description">{t.heroDescriptionFirst}<br class="desktop-break" />{t.heroDescriptionSecond}</p>
+            <p class="hero-aside">{t.heroAsideFirst}<br />{t.heroAsideSecond}</p>
+            <div class="actions">
+              <a class="button button-primary" href="#get-started">{t.start} <span aria-hidden="true">↗</span></a>
+              <a class="text-link" href={repo}>{t.source} <span aria-hidden="true">↗</span></a>
+            </div>
+            <p class="hero-meta">{t.rust} <span>/</span> {t.terminal} <span>/</span> GPL-3.0-OR-LATER</p>
+          </div>
+          <div class="hero-visual">
+            <div class="orbit-label" aria-hidden="true">{t.figureLabel}</div>
+            <figure class="terminal-figure hero-terminal">
+              <a href={asset('workflow.svg')} aria-label={t.workflowOpen}><img src={asset('workflow.svg')} width="880" height="600" alt={t.workflowAlt} fetchpriority="high" /></a>
+              <figcaption>{t.workflowCaption}</figcaption>
+            </figure>
+            <div class="human-stamp"><span aria-hidden="true">✳</span> {t.stampFirst}<br />{t.stampSecond}</div>
+          </div>
+        </section>
+
+        <div class="signal-strip" aria-label={t.principles}>
+          <span><i aria-hidden="true">+</i> CLAUDE CODE &amp; CODEX</span>
+          <span><i aria-hidden="true">+</i> {t.oneAgent}</span>
+          <span><i aria-hidden="true">+</i> {t.everyGate}</span>
+          <span><i aria-hidden="true">+</i> {t.artifacts}</span>
+        </div>
+
+        <section class="intro section" aria-labelledby="purpose-title">
+          <div><p class="eyebrow">{t.purposeLabel}</p><h2 id="purpose-title">{t.purposeFirst}<br />{t.purposeSecond}<em>{t.purposeEmphasis}</em></h2></div>
+          <div class="intro-copy"><p>{t.purposeBody}</p><p>{t.purposeDecision}</p><p class="aside">{t.purposeAside}</p></div>
+        </section>
+
+        <section id="how-it-works" class="section workflow" aria-labelledby="workflow-title">
+          <div class="section-heading"><div><p class="eyebrow">{t.workflowLabel}</p><h2 id="workflow-title">{t.workflowTitle}</h2></div><p>{t.workflowDefault}<br />{t.workflowCustomise}</p></div>
+          <ol class="steps">
+            {steps.map((step) => <li><div class="step-top"><span>{step.number}</span><span aria-hidden="true">↗</span></div><h3>{step.name}</h3><p class="agent-label">{step.agent}</p><p>{step.text}</p><div class="gate"><span aria-hidden="true">◇</span> {t.gate}</div></li>)}
+          </ol>
+          <p class="workflow-note"><span aria-hidden="true">↳</span> {t.workflowNote}</p>
+        </section>
+
+        <section class="section inspection" aria-labelledby="inspection-title">
+          <figure class="terminal-figure review-terminal">
+            <a href={asset('review.svg')} aria-label={t.reviewOpen}><img src={asset('review.svg')} width="800" height="550" alt={t.reviewAlt} loading="lazy" /></a>
+            <figcaption>{t.reviewCaption}</figcaption>
+          </figure>
+          <div class="inspection-copy"><p class="eyebrow">{t.inspectionLabel}</p><h2 id="inspection-title">{t.inspectionFirst}<br />{t.inspectionSecond}</h2><p>{t.inspectionBody}</p><ul class="feature-list"><li><span>01</span><div><h3>{t.filesTitle}</h3><p>{t.filesBody}</p></div></li><li><span>02</span><div><h3>{t.revisionsTitle}</h3><p>{t.revisionsBody}</p></div></li><li><span>03</span><div><h3>{t.pauseTitle}</h3><p>{t.pauseBody}</p></div></li></ul></div>
+        </section>
+
+        <section id="get-started" class="section installation" aria-labelledby="install-title">
+          <div><p class="eyebrow">{t.installLabel}</p><h2 id="install-title">{t.installFirst}<br />{t.installSecond}</h2><p>{t.installBody}</p><a class="text-link" href={`${repo}#requirements`}>{t.setupGuide} <span aria-hidden="true">↗</span></a></div>
+          <div class="install-terminal"><div class="terminal-bar"><span>{t.quickStart}</span><span aria-hidden="true">─ &nbsp; □ &nbsp; ×</span></div><pre aria-label={t.commands}><code><span class="code-comment">{t.fetchComment}</span>{'\n'}git clone https://github.com/dramoscalvo/miau.git{'\n'}cd miau{'\n'}cargo install --path . --locked{'\n\n'}<span class="code-comment">{t.projectComment}</span>{'\n'}cd {t.projectPath}{'\n'}<span class="code-highlight">miau</span></code></pre><p>{t.press}<kbd>n</kbd>{t.createRun}<kbd>p</kbd>{t.setPrompt}<kbd>s</kbd>{t.startRun}</p></div>
+        </section>
+
+        <section id="contribute" class="section contribution" aria-labelledby="contribute-title">
+          <div class="contribution-header"><div><p class="eyebrow">{t.contributionLabel}</p><h2 id="contribute-title">{t.contributionFirst}<br />{t.contributionSecond}<em>{t.contributionEmphasis}</em></h2></div><p>{t.contributionIntro}<br />{t.contributionWizard}<br />{t.contributionBug}</p></div>
+          <div class="contribution-links"><a href={`${repo}/issues/new?template=bug_report.md`}><span class="contribution-icon" aria-hidden="true">[ ! ]</span><h3>{t.bugTitle} <span aria-hidden="true">↗</span></h3><p>{t.bugBody}</p></a><a href={`${repo}/issues/new?template=feature_request.md`}><span class="contribution-icon" aria-hidden="true">[ ? ]</span><h3>{t.ideaTitle} <span aria-hidden="true">↗</span></h3><p>{t.ideaBody}</p></a><a href={`${repo}/blob/main/AGENTS.md`}><span class="contribution-icon" aria-hidden="true">[ + ]</span><h3>{t.changeTitle} <span aria-hidden="true">↗</span></h3><p>{t.changeBody}</p></a></div>
+          <p class="contribution-footnote">{t.contributionFootnote} <a href={`${repo}/blob/main/docs/architecture.md`}>{t.architecture} <span aria-hidden="true">↗</span></a></p>
+        </section>
+      </main>
+      <footer><a class="brand" href="#hero-title">miau<span class="brand-cursor">_</span></a><p>{t.footer}</p><div><a href={`${repo}/blob/main/LICENSE`}>GPL-3.0-or-later</a><a href={repo}>GitHub ↗</a></div><p class="footer-note">{t.copyright}</p></footer>
+    </div>
+  </body>
+</html>

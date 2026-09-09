@@ -70,6 +70,7 @@ em {
   padding: 0 64px;
 }
 .site-header {
+  gap: 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -98,6 +99,21 @@ em {
   gap: 36px;
   font-family: var(--mono);
   font-size: 12px;
+}
+.site-header > nav:first-of-type {
+  margin-left: auto;
+}
+.site-header .language-switch {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+}
+.language-switch a {
+  padding: 8px;
+}
+.language-switch a[aria-current="page"] {
+  color: var(--yellow);
+  background: var(--panel);
 }
 .nav-github {
   border: 1px solid var(--line);
@@ -576,6 +592,20 @@ footer .footer-note {
   }
   .site-header {
     min-height: 85px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    padding: 20px 0;
+  }
+  .site-header > nav:first-of-type {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+  .site-header .language-switch {
+    grid-row: 1;
+    grid-column: 2;
   }
   .site-header nav {
     gap: 18px;
@@ -696,9 +726,6 @@ footer .footer-note {
   .nav-github {
     padding: 8px;
   }
-  .site-header nav > a:first-child {
-    display: none;
-  }
   h1 {
     letter-spacing: -2px;
     font-size: 3.3rem;
@@ -751,6 +778,13 @@ footer .footer-note {
   }
   .steps li {
     padding: 20px 16px 0;
+  }
+  .steps {
+    grid-template-columns: 1fr;
+  }
+  .steps li + li {
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
   .steps h3 {
     font-size: 22px;
