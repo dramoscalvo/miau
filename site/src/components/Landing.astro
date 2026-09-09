@@ -8,6 +8,7 @@ import '@fontsource/space-mono/latin-700.css';
 
 import { getAbsoluteLocaleUrl, getRelativeLocaleUrl } from 'astro:i18n';
 import { messages, locales, type Locale } from '../i18n/messages';
+import LogoTail from './LogoTail.astro';
 
 interface Props { locale: Locale }
 const { locale } = Astro.props;
@@ -43,7 +44,7 @@ const canonical = getAbsoluteLocaleUrl(locale);
       <header class="site-header">
         <a class="brand" href="#hero-title" aria-label={t.home}>
           <svg viewBox="0 0 32 28" width="32" height="28" aria-hidden="true"><path d="M2 2h6v4h16V2h6v22h-6v4H8v-4H2Z" fill="currentColor"/><path d="M8 12h4v4H8zm12 0h4v4h-4zm-6 8h4v4h-4z" fill="#100e19"/></svg>
-          miau<span class="brand-cursor">_</span>
+          miau<LogoTail />
         </a>
         <nav aria-label={t.navigation}>
           <a href="#how-it-works">{t.how}</a>
@@ -117,7 +118,7 @@ const canonical = getAbsoluteLocaleUrl(locale);
           <p class="contribution-footnote">{t.contributionFootnote} <a href={`${repo}/blob/main/docs/architecture.md`}>{t.architecture} <span aria-hidden="true">↗</span></a></p>
         </section>
       </main>
-      <footer><a class="brand" href="#hero-title">miau<span class="brand-cursor">_</span></a><p>{t.footer}</p><div><a href={`${repo}/blob/main/LICENSE`}>GPL-3.0-or-later</a><a href={repo}>GitHub ↗</a></div><p class="footer-note">{t.copyright}</p></footer>
+      <footer><a class="brand" href="#hero-title">miau<LogoTail /></a><p>{t.footer}</p><div><a href={`${repo}/blob/main/LICENSE`}>GPL-3.0-or-later</a><a href={repo}>GitHub ↗</a></div><p class="footer-note">{t.copyright}</p></footer>
     </div>
   </body>
 </html>

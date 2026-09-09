@@ -89,9 +89,12 @@ em {
 .brand svg {
   color: var(--yellow);
 }
-.brand-cursor {
+.brand .brand-tail {
   color: var(--pink);
-  margin-left: -10px;
+  width: 0.9em;
+  height: 1em;
+  margin-left: -8px;
+  flex: none;
 }
 .site-header nav {
   display: flex;
