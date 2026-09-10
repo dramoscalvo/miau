@@ -87,6 +87,7 @@ pub struct HelpView<'a> {
     pub mode: &'a Mode,
     pub prompt_edit_mode: PromptEditMode,
     pub detail_view: DetailView,
+    pub has_review: bool,
     pub status: Option<NodeStatus>,
     pub is_current: bool,
     pub can_prompt: bool,
@@ -102,6 +103,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         mode,
         prompt_edit_mode,
         detail_view,
+        has_review,
         status,
         is_current,
         can_prompt,
@@ -178,9 +180,13 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         };
         if !matches!(mode, Mode::RunList | Mode::Confirm(_)) {
             let view_hints = match detail_view {
-                DetailView::Review => "v full artifact · PgUp/PgDn review",
-                DetailView::Artifact => "v changes",
-                DetailView::Changes => "v review · j/k files · PgUp/PgDn diff",
+                DetailView::Review if has_review => "v complete document · PgUp/PgDn summary",
+                DetailView::Review => "v changes · PgUp/PgDn document",
+                DetailView::Artifact => "v changes · PgUp/PgDn document",
+                DetailView::Changes if has_review => {
+                    "v review summary · j/k files · PgUp/PgDn diff"
+                }
+                DetailView::Changes => "v complete document · j/k files · PgUp/PgDn diff",
             };
             hints = format!("{hints} · {view_hints}");
         }
@@ -213,6 +219,7 @@ mod tests {
                         mode: &mode,
                         prompt_edit_mode: PromptEditMode::Normal,
                         detail_view: DetailView::Artifact,
+                        has_review: false,
                         status: None,
                         is_current: false,
                         can_prompt: false,
@@ -296,6 +303,7 @@ mod tests {
                         mode: &mode,
                         prompt_edit_mode: PromptEditMode::Normal,
                         detail_view: DetailView::Artifact,
+                        has_review: false,
                         status: None,
                         is_current: false,
                         can_prompt: false,

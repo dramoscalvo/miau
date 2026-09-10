@@ -183,7 +183,9 @@ impl Default for Model {
 pub enum Message {
     Tick,
     ToggleFocus,
-    ToggleDetailView,
+    ToggleDetailView {
+        has_review: bool,
+    },
     SelectPreviousChange,
     SelectNextChange {
         last: usize,
@@ -365,11 +367,13 @@ impl Model {
         match message {
             Message::Tick => self.spinner = (self.spinner + 1) % 4,
             Message::ToggleFocus => self.focus = self.focus.next(),
-            Message::ToggleDetailView => {
+            Message::ToggleDetailView { has_review } => {
                 self.detail_view = match self.detail_view {
-                    DetailView::Review => DetailView::Artifact,
+                    DetailView::Review if has_review => DetailView::Artifact,
+                    DetailView::Review => DetailView::Changes,
                     DetailView::Artifact => DetailView::Changes,
-                    DetailView::Changes => DetailView::Review,
+                    DetailView::Changes if has_review => DetailView::Review,
+                    DetailView::Changes => DetailView::Artifact,
                 };
                 self.flow_scroll = 0;
                 self.change_scroll = 0;
@@ -863,15 +867,32 @@ mod tests {
         let mut model = Model::default();
         assert_eq!(model.detail_view, DetailView::Review);
         model.flow_scroll = 10;
-        model.update(Message::ToggleDetailView);
+        model.update(Message::ToggleDetailView { has_review: true });
         assert_eq!(
             (model.detail_view, model.flow_scroll),
             (DetailView::Artifact, 0)
         );
-        model.update(Message::ToggleDetailView);
+        model.update(Message::ToggleDetailView { has_review: true });
         assert_eq!(model.detail_view, DetailView::Changes);
-        model.update(Message::ToggleDetailView);
+        model.update(Message::ToggleDetailView { has_review: true });
         assert_eq!(model.detail_view, DetailView::Review);
+    }
+
+    #[test]
+    fn detail_cycle_skips_duplicate_document_without_review() {
+        let mut model = Model {
+            flow_scroll: 10,
+            ..Model::default()
+        };
+        model.update(Message::ToggleDetailView { has_review: false });
+        assert_eq!(
+            (model.detail_view, model.flow_scroll),
+            (DetailView::Changes, 0)
+        );
+        model.update(Message::ToggleDetailView { has_review: false });
+        assert_eq!(model.detail_view, DetailView::Artifact);
+        model.update(Message::ToggleDetailView { has_review: false });
+        assert_eq!(model.detail_view, DetailView::Changes);
     }
 
     #[test]
@@ -898,8 +919,8 @@ mod tests {
     fn changes_view_navigation_selects_files_and_scrolls_the_diff() {
         let mut model = Model::default();
 
-        model.update(Message::ToggleDetailView);
-        model.update(Message::ToggleDetailView);
+        model.update(Message::ToggleDetailView { has_review: true });
+        model.update(Message::ToggleDetailView { has_review: true });
         model.update(Message::SelectNextChange { last: 2 });
         model.update(Message::ScrollChangeDiff(10));
         model.update(Message::SelectPreviousChange);

@@ -506,11 +506,13 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
     }
     let title = if review.is_some() {
         format!(
-            " Review · {} · v full artifact · PgDn more ",
+            " Review summary · {} · v complete document ",
             status.map_or("", |status| node_status_label(status, viewing_complete))
         )
-    } else if detail_view == DetailView::Review && !show_agent_output && !artifact.is_empty() {
-        " Full artifact · no compact review · PgDn more ".into()
+    } else if !show_agent_output && !artifact.is_empty() && artifact_review(artifact).is_none() {
+        " Complete document · no separate summary · v changes ".into()
+    } else if !show_agent_output && !artifact.is_empty() {
+        " Complete document · includes Handoff · v changes ".into()
     } else {
         detail_title(status, viewing_complete, activity, spinner)
     };
@@ -915,6 +917,11 @@ mod tests {
             }).unwrap();
             let text = buffer_text(&terminal);
             assert!(text.contains("Goal: compact review"));
+            assert!(text.contains(if show_handoff {
+                "Complete document"
+            } else {
+                "Review summary"
+            }));
             assert_eq!(text.contains("Technical evidence"), show_handoff);
         }
     }

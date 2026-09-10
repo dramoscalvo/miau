@@ -20,7 +20,7 @@ use crate::{
     },
     terminal::application::{
         Action, DetailView, Message, Mode, Model, PromptEditMode, PromptKind, PromptOperator,
-        PromptPendingCommand, PromptTextObject, PromptWordStyle, SubmittedPrompt,
+        PromptPendingCommand, PromptTextObject, PromptWordStyle, SubmittedPrompt, artifact_review,
     },
     workflow::{
         application::{Orchestrator, WorkingTreeRepository},
@@ -645,7 +645,9 @@ impl App {
                 self.return_to_run_list();
             }
             KeyCode::Char('v') => {
-                self.ui.update(Message::ToggleDetailView);
+                self.ui.update(Message::ToggleDetailView {
+                    has_review: artifact_review(&self.artifact).is_some(),
+                });
                 self.refresh_working_tree_if_visible();
             }
             KeyCode::Left => {
@@ -955,6 +957,7 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
             mode: &app.ui.mode,
             prompt_edit_mode: app.ui.prompt_edit_mode,
             detail_view: app.ui.detail_view,
+            has_review: artifact_review(&app.artifact).is_some(),
             status: app
                 .run
                 .as_ref()
