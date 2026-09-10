@@ -32,6 +32,10 @@ relevant files from disk even when resuming a session; missing required inputs
 must be reported. The terminal extracts Review for display only, preserving the
 full artifact for editing and legacy-output fallback. Neither section controls
 approval, and length targets are advisory so findings are never discarded.
+The output contract asks agents to hard-wrap prose near 120 characters, staying
+within 150 where practical, with exceptions for syntax-sensitive content such
+as code, tables, and links. This is a writing instruction; persistence does not
+reformat agent output or existing artifacts.
 
 Workflow nodes may opt into a named session group. At process start, the
 orchestrator selects only the newest captured session from an earlier node with

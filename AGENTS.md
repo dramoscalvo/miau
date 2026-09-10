@@ -61,6 +61,14 @@ types into application ports. See [docs/architecture.md](docs/architecture.md).
 - Truncate display text by Unicode width; never slice strings by byte index.
 - Keep UI code free of process spawning and adapter code free of ratatui.
 
+## Documentation formatting
+
+Hard-wrap Markdown prose with actual newline characters at word boundaries,
+aiming for 120 characters per line and keeping lines within 150 characters where
+practical. Preserve paragraph breaks and list indentation. Exempt code blocks,
+tables, URLs, paths, and other indivisible tokens when wrapping would damage
+their meaning or Markdown syntax.
+
 ## Development workflow
 
 Use a test-first loop:

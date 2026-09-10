@@ -1,6 +1,12 @@
 Return one compact Markdown artifact, starting with exactly `# Review`, followed
 by exactly `# Handoff` on its own line. Use these sections even with a custom role.
 
+Hard-wrap Markdown prose with actual newline characters at word boundaries,
+aiming for 120 characters per line and keeping lines within 150 characters where
+practical. Preserve paragraph breaks and list indentation. Do not insert breaks
+inside code blocks, tables, URLs, paths, or other indivisible tokens when doing
+so would damage their meaning or Markdown syntax.
+
 In Review, aim for 24 short lines (roughly one screen). Put the goal and human
 decisions/risks first; never hide a blocking issue to meet the length target.
 Show a compact file tree marked A/M/D/R with one-line purposes, labelled Proposed
