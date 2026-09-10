@@ -84,3 +84,16 @@ editor handoff. Agent artifact writes use the next unused `_vN` filename and
 never overwrite an existing result. Snapshots use the next unused numbered
 suffix and are never overwritten. A stale `Running` node loaded after a reboot
 becomes a visible failure requiring a human decision.
+
+Human revision requests are preserved in full as versioned `feedback-N.md`
+files in the run directory (N is the zero-based workflow step index), before
+re-queuing the step. The activity channel remains a compact summary. A revision
+prompt references the current artifact path so manual edits are read from disk;
+a failed prior attempt may have no artifact. Feedback files are history, not
+an automatic approval or routing mechanism.
+
+A successful interactive discussion returns to an editable update request.
+Only explicit submission enters the existing revision use case; cancelling
+leaves the workflow gate unchanged. The resumed session supplies discussion
+context, without transcript forwarding. Disk edits made during the interactive
+session remain canonical even when the update request is cancelled.

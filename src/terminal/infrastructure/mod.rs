@@ -833,7 +833,15 @@ impl App {
         self.run = Some(self.repository.load(&run.id)?);
         self.reload_artifact()?;
         self.refresh_working_tree_if_visible();
-        handoff_result?;
+        let status = handoff_result?;
+        if !status.success() {
+            self.ui.error = Some(format!(
+                "discussion exited with {status}; review the artifact before continuing"
+            ));
+            return Ok(());
+        }
+        self.ui.error = None;
+        self.ui.open_prompt(PromptKind::Discussion);
         Ok(())
     }
 }

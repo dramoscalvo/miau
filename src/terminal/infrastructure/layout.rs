@@ -9,7 +9,7 @@ pub struct Areas {
 }
 
 pub fn areas(area: Rect, prompt: Option<&str>) -> Areas {
-    let help_height = prompt.map_or(1, |prompt| {
+    let help_height = prompt.map_or(4, |prompt| {
         let inner_width = area.width.saturating_sub(2) as usize;
         let row_count = u16::try_from(prompt_rows(prompt, inner_width).len()).unwrap_or(u16::MAX);
         let desired = row_count.saturating_add(2);

@@ -372,6 +372,55 @@ impl WorkingTreeView<'_> {
     }
 }
 
+fn gate_guidance(run: &Run, viewed_node: usize) -> String {
+    let Some(node) = run.nodes.get(viewed_node) else {
+        return String::new();
+    };
+    if !matches!(node.status, NodeStatus::Done | NodeStatus::Failed) {
+        return String::new();
+    }
+    let check = if node.status == NodeStatus::Failed {
+        "This step failed. Inspect the error and any partial changes before deciding."
+    } else {
+        match node.role.as_str() {
+            "planner" => "Check the approach, scope, and acceptance cases.",
+            "critic" | "reviewer" => {
+                "Check findings and evidence; decide which issues need changes before continuing."
+            }
+            "implementer" => {
+                "Inspect the code changes and verification results against the accepted plan."
+            }
+            _ => "Check the result, unresolved issues, and verification evidence.",
+        }
+    };
+    let mut guidance = format!("{}: {check}\n", node.name);
+    if viewed_node == run.cursor {
+        let next = run
+            .nodes
+            .iter()
+            .skip(run.cursor + 1)
+            .find(|node| node.status != NodeStatus::Skipped);
+        guidance.push_str(&next.map_or_else(
+            || "a approve & continue: complete the workflow. ".to_owned(),
+            |next| format!("a approve & continue: start {}. ", next.name),
+        ));
+    }
+    if node.command.is_none() {
+        guidance.push_str(if viewed_node == run.cursor {
+            "r request changes: revise with your feedback. "
+        } else {
+            "r request changes: revisits this step; later steps will be offered again. "
+        });
+        if node.session_id.is_some() {
+            guidance.push_str("d discuss: clarify, then update. ");
+        }
+    }
+    if viewed_node == run.cursor {
+        guidance.push_str("\ne edit artifact: document only; saving keeps this gate open.");
+    }
+    guidance
+}
+
 pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
     let FlowView {
         run,
@@ -444,11 +493,17 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
     let review = (detail_view == DetailView::Review && !show_agent_output)
         .then(|| artifact_review(artifact))
         .flatten();
-    let text = if show_agent_output {
+    let mut text = if show_agent_output {
         stream.join("\n")
     } else {
         review.unwrap_or(artifact).to_owned()
     };
+    if let Some(run) = run {
+        let guidance = gate_guidance(run, viewed_node);
+        if !guidance.is_empty() {
+            text = format!("{guidance}\n\n{text}");
+        }
+    }
     let title = if review.is_some() {
         format!(
             " Review · {} · v full artifact · PgDn more ",
@@ -635,6 +690,25 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
     use ratatui::{layout::Rect, style::Color};
     use std::collections::HashMap;
+
+    #[test]
+    fn gate_guidance_explains_current_and_historical_decisions() {
+        let mut run = run_with_status(NodeStatus::Done);
+        run.cursor = 0;
+        let guidance = super::gate_guidance(&run, 0);
+        assert!(guidance.contains("scope"));
+        assert!(guidance.contains("start review"));
+        assert!(guidance.contains("r request changes"));
+        assert!(guidance.contains("e edit artifact"));
+        run.cursor = 1;
+        let guidance = super::gate_guidance(&run, 0);
+        assert!(guidance.contains("revisits this step"));
+        assert!(!guidance.contains("a approve"));
+        run.nodes[1].status = NodeStatus::Failed;
+        assert!(super::gate_guidance(&run, 1).contains("failed"));
+        run.nodes[1].status = NodeStatus::Running;
+        assert!(super::gate_guidance(&run, 1).is_empty());
+    }
 
     fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
         terminal

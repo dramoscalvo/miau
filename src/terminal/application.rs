@@ -15,6 +15,7 @@ pub enum Mode {
 pub enum PromptKind {
     Initial,
     Revision,
+    Discussion,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -321,6 +322,7 @@ impl Model {
         self.prompt = match kind {
             PromptKind::Initial => self.pending_prompt.clone().unwrap_or_default(),
             PromptKind::Revision => String::new(),
+            PromptKind::Discussion => "Update this step's artifact to incorporate the agreed changes from our interactive discussion. Read the current artifact from disk first. Apply any agreed implementation changes if this is an implementation step. If no changes were agreed, say so; do not invent decisions. Return the complete updated artifact for human review.".into(),
         };
         self.prompt_cursor = self.prompt.len();
         self.move_prompt_left();
@@ -353,7 +355,7 @@ impl Model {
                 self.pending_prompt = (!prompt.is_empty()).then_some(prompt);
                 SubmittedPrompt::Initial
             }
-            PromptKind::Revision => SubmittedPrompt::Revision(prompt),
+            PromptKind::Revision | PromptKind::Discussion => SubmittedPrompt::Revision(prompt),
         };
         self.mode = Mode::Gate;
         Some(submission)
@@ -1001,6 +1003,27 @@ mod tests {
             (model.mode, model.prompt),
             (Mode::Prompt(PromptKind::Initial), "é".into())
         );
+    }
+
+    #[test]
+    fn discussion_return_waits_for_human_to_submit_or_cancel() {
+        let mut model = Model::default();
+        model.open_prompt(PromptKind::Discussion);
+        assert_eq!(model.mode, Mode::Prompt(PromptKind::Discussion));
+        assert!(model.prompt.contains("agreed changes"));
+        assert!(model.pending_prompt.is_none());
+        let draft = model.prompt.clone();
+        assert_eq!(
+            model.submit_prompt(),
+            Some(SubmittedPrompt::Revision(draft))
+        );
+        assert_eq!(model.mode, Mode::Gate);
+
+        model.open_prompt(PromptKind::Discussion);
+        model.cancel_prompt();
+        assert_eq!(model.mode, Mode::Gate);
+        assert!(model.pending_prompt.is_none());
+        assert_eq!(model.submit_prompt(), None);
     }
 
     #[test]

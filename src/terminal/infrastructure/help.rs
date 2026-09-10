@@ -11,7 +11,7 @@ use ratatui::{
     layout::Rect,
     style::{Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
 
 fn hint_line(text: &str) -> Line<'static> {
@@ -56,21 +56,21 @@ fn gate_text(
             commands.push("s start");
         }
         Some(NodeStatus::Done | NodeStatus::Failed) if is_current => {
-            commands.push("a approve");
+            commands.push("a approve & continue");
             if can_prompt {
-                commands.push("p prompt");
+                commands.push("r request changes");
             }
-            commands.push("e edit");
             if can_discuss {
-                commands.push("d discuss");
+                commands.push("d discuss with agent");
             }
+            commands.push("e edit artifact");
         }
         Some(NodeStatus::Done | NodeStatus::Failed) => {
             if can_prompt {
-                commands.push("p prompt");
+                commands.push("r request changes");
             }
             if can_discuss {
-                commands.push("d discuss");
+                commands.push("d discuss with agent");
             }
         }
         Some(NodeStatus::Pending | NodeStatus::Running | NodeStatus::Skipped) => {}
@@ -126,15 +126,23 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
                 " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x dd/D delete · yy/Y yank · p paste · text objects · 0/^/$ gg/G · Enter save · Esc cancel ",
             ),
             (PromptKind::Revision, PromptEditMode::Normal) => (
-                " Revision prompt · NORMAL ",
+                " Request changes · NORMAL ",
                 " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x dd/D delete · yy/Y yank · p paste · text objects · 0/^/$ gg/G · Enter send · Esc cancel ",
+            ),
+            (PromptKind::Discussion, PromptEditMode::Normal) => (
+                " Back from discussion · update artifact? ",
+                " Enter request update · i edit request · Esc back to review ",
+            ),
+            (PromptKind::Discussion, PromptEditMode::Insert) => (
+                " Back from discussion · edit update request ",
+                " Enter request update · Esc normal ",
             ),
             (PromptKind::Initial, PromptEditMode::Insert) => (
                 " Initial prompt · INSERT ",
                 " type to edit · Backspace/Delete remove · Enter save · Esc normal ",
             ),
             (PromptKind::Revision, PromptEditMode::Insert) => (
-                " Revision prompt · INSERT ",
+                " Request changes · INSERT ",
                 " type to edit · Backspace/Delete remove · Enter send · Esc normal ",
             ),
         };
@@ -174,11 +182,11 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
                 DetailView::Artifact => "v changes",
                 DetailView::Changes => "v review · j/k files · PgUp/PgDn diff",
             };
-            hints = format!("{view_hints} · {hints}");
+            hints = format!("{hints} · {view_hints}");
         }
         hint_line(&hints)
     };
-    frame.render_widget(Paragraph::new(text), area);
+    frame.render_widget(Paragraph::new(text).wrap(Wrap { trim: true }), area);
 }
 
 #[cfg(test)]
@@ -254,7 +262,7 @@ mod tests {
     fn completed_gate_advertises_only_decision_commands() {
         assert_eq!(
             gate_text(Some(NodeStatus::Done), true, true, true, true),
-            "a approve · p prompt · e edit · d discuss · f finish · ←/→ agents · b runs · tab pane · q quit"
+            "a approve & continue · r request changes · d discuss with agent · e edit artifact · f finish · ←/→ agents · b runs · tab pane · q quit"
         );
     }
 
@@ -262,7 +270,7 @@ mod tests {
     fn completed_historical_agent_advertises_follow_up_without_approval() {
         assert_eq!(
             gate_text(Some(NodeStatus::Done), false, true, true, true),
-            "p prompt · d discuss · f finish · ←/→ agents · b runs · tab pane · q quit"
+            "r request changes · d discuss with agent · f finish · ←/→ agents · b runs · tab pane · q quit"
         );
     }
 

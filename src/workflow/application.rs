@@ -77,6 +77,13 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
                     .filter(|node| node.status == NodeStatus::Done)
             });
         let mut inputs = Vec::new();
+        if node.attempts > 1 || node.status == NodeStatus::Done {
+            let path = self.repository.path(&run.id, &node.writes)?;
+            inputs.push(format!(
+                "- Current artifact to revise (if present; a failed attempt may have no artifact): {}",
+                path.display()
+            ));
+        }
         for upstream in run.nodes.iter().take(run.cursor) {
             if upstream.status == NodeStatus::Done {
                 let path = self.repository.path(&run.id, &upstream.writes)?;
@@ -233,6 +240,11 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
                 None
             }
             Decision::Revise { note } => {
+                self.repository.write_versioned(
+                    &run.id,
+                    &format!("feedback-{}.md", run.cursor),
+                    &note,
+                )?;
                 if let Some(node) = run.current_mut() {
                     node.status = NodeStatus::Pending;
                 }
@@ -302,6 +314,8 @@ impl<R: RunRepository + ArtifactRepository + TextRepository> Orchestrator<R> {
         if !matches!(node.status, NodeStatus::Done | NodeStatus::Failed) {
             return Err(OrchestratorError::InvalidRevisit(node.status));
         }
+        self.repository
+            .write_versioned(&run.id, &format!("feedback-{target}.md"), &note)?;
         let name = node.name.clone();
         let agent = node.agent.clone();
         node.status = NodeStatus::Pending;
@@ -390,6 +404,52 @@ mod tests {
             ],
         }
     }
+    #[test]
+    fn revision_preserves_full_feedback_and_references_current_artifact() {
+        let root = std::env::temp_dir().join(format!("miau-human-feedback-{}", std::process::id()));
+        fs::create_dir_all(root.join("roles")).unwrap();
+        fs::write(root.join("roles/planner.md"), "Plan the work.").unwrap();
+        let repo = FileRepository::new(root.join("runs"));
+        let mut run = fixture(&root);
+        run.cursor = 0;
+        let orchestrator = Orchestrator::new(repo, root.join("roles"));
+        let note = "Keep this complete human instruction, including the final requirement.\nUse Unicode: 界.";
+        orchestrator
+            .decide(&mut run, Decision::Revise { note: note.into() })
+            .unwrap();
+        assert_eq!(
+            orchestrator
+                .repository()
+                .read(&run.id, "feedback-0.md")
+                .unwrap(),
+            note
+        );
+        orchestrator.begin(&mut run).unwrap();
+        let prompt = orchestrator.assemble_prompt(&run, Some(note)).unwrap();
+        assert!(prompt.contains("Current artifact to revise"));
+        assert!(prompt.contains("plan.md"));
+        assert!(prompt.contains(note));
+        run.nodes[0].status = NodeStatus::Done;
+        orchestrator
+            .revisit(&mut run, 0, "Second request".into())
+            .unwrap();
+        assert_eq!(
+            orchestrator
+                .repository()
+                .read(&run.id, "feedback-0_v2.md")
+                .unwrap(),
+            "Second request"
+        );
+        assert_eq!(
+            orchestrator
+                .repository()
+                .read(&run.id, "feedback-0.md")
+                .unwrap(),
+            note
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn prompt_references_canonical_artifact_without_embedding_report() {
         let root = std::env::temp_dir().join(format!("miau-prompt-{}", std::process::id()));
