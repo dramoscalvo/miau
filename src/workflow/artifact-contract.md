@@ -19,6 +19,20 @@ text diagram only when relationships or execution order need explaining.
 For critique/review, prioritize findings with severity and evidence over repeating
 the plan. Human decisions remain with the operator.
 
+For every role and agent, put questions requiring human input in Review as
+second-level headings: `## D1: Question?`, `## D2: Question?`, and so on. Each
+decision must have exactly one plain `Status: Open` or `Status: Resolved` line,
+followed by concise context, options when useful, and a recommendation. Keep IDs
+unique within the step and stable across its revisions; never renumber or reuse
+an ID for a different question. Reserve these headings for human decisions, not
+general findings or decisions already made by the agent. Do not put decision
+headings inside code fences or repeat them in Handoff; reference their IDs there.
+After receiving human answers, incorporate them in the updated artifact, mark
+answered decisions `Status: Resolved`, and record `Answer: ...`. Keep unanswered
+decisions `Status: Open`; partial answers do not authorize guessing the rest.
+Do not invent questions when no human input is needed. Answer submission is not
+workflow approval. These decision details may exceed the Review length target.
+
 In Handoff, record only additional information the next agent needs: relevant
 paths/symbols, constraints, non-obvious decisions and their reasons, unresolved
 issues, and the next task. Reference the current upstream artifact paths and

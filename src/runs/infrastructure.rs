@@ -113,7 +113,9 @@ impl ArtifactRepository for FileRepository {
         let path = self.path(run_id, name)?;
         let parent = path.parent().unwrap_or(&self.root);
         fs::create_dir_all(parent).map_err(|e| Self::map_io(parent, e))?;
-        fs::write(&path, text).map_err(|e| Self::map_io(&path, e))
+        let temporary = parent.join(format!("{name}.tmp"));
+        fs::write(&temporary, text).map_err(|e| Self::map_io(&temporary, e))?;
+        fs::rename(&temporary, &path).map_err(|e| Self::map_io(&path, e))
     }
     fn write_versioned(
         &self,
@@ -177,6 +179,24 @@ impl TextRepository for FileRepository {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn failed_atomic_write_preserves_existing_draft() {
+        use crate::runs::application::ArtifactRepository;
+        let root = std::env::temp_dir().join(format!("miau-atomic-draft-{}", std::process::id()));
+        let repo = super::FileRepository::new(&root);
+        repo.write("001", "decision-drafts-0.json", "old draft")
+            .unwrap();
+        std::fs::create_dir(root.join("001/decision-drafts-0.json.tmp")).unwrap();
+        assert!(
+            repo.write("001", "decision-drafts-0.json", "new draft")
+                .is_err()
+        );
+        assert_eq!(
+            repo.read("001", "decision-drafts-0.json").unwrap(),
+            "old draft"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
     use super::*;
     use chrono::Utc;
     fn run(id: &str) -> Run {

@@ -1,5 +1,6 @@
 //! Terminal interaction model shared by input and rendering adapters.
 
+use crate::workflow::application::decisions::{self, Drafts, Question};
 use unicode_width::UnicodeWidthChar;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +14,7 @@ pub enum Mode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptKind {
+    Answer,
     Initial,
     Revision,
     Discussion,
@@ -87,6 +89,7 @@ pub enum Focus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetailView {
+    Decisions,
     Review,
     Artifact,
     Changes,
@@ -134,6 +137,10 @@ impl Focus {
 
 #[derive(Debug, Clone)]
 pub struct Model {
+    pub questions: Vec<Question>,
+    pub decision_drafts: Drafts,
+    pub decision_selected: usize,
+    pub decision_error: Option<String>,
     pub mode: Mode,
     pub focus: Focus,
     pub selected: usize,
@@ -157,6 +164,10 @@ pub struct Model {
 impl Default for Model {
     fn default() -> Self {
         Self {
+            questions: Vec::new(),
+            decision_drafts: Drafts::default(),
+            decision_selected: 0,
+            decision_error: None,
             mode: Mode::RunList,
             focus: Focus::Flow,
             selected: 0,
@@ -301,7 +312,40 @@ pub(crate) fn prompt_cursor_position(text: &str, cursor: usize, width: usize) ->
 }
 
 impl Model {
+    pub fn load_decisions(&mut self, artifact: &str) {
+        self.questions.clear();
+        self.decision_error = None;
+        match decisions::parse(artifact) {
+            Ok(questions) => self.questions = questions,
+            Err(error) => self.decision_error = Some(error),
+        }
+        self.decision_selected = self
+            .decision_selected
+            .min(self.questions.len().saturating_sub(1));
+        self.flow_scroll = 0;
+        if !self.questions.is_empty() || self.decision_error.is_some() {
+            self.detail_view = DetailView::Decisions;
+        } else if self.detail_view == DetailView::Decisions {
+            self.detail_view = DetailView::Review;
+        }
+    }
+
+    pub fn open_answer(&mut self) {
+        let Some(question) = self.questions.get(self.decision_selected) else {
+            return;
+        };
+        let answer = self.decision_drafts.answer(question).to_owned();
+        self.open_prompt(PromptKind::Answer);
+        self.prompt = answer;
+        self.prompt_cursor = self.prompt.len();
+        self.prompt_edit_mode = PromptEditMode::Insert;
+    }
+
     pub fn return_to_run_list(&mut self) {
+        self.questions.clear();
+        self.decision_drafts = Drafts::default();
+        self.decision_error = None;
+        self.decision_selected = 0;
         self.mode = Mode::RunList;
         self.focus = Focus::Flow;
         self.flow_scroll = 0;
@@ -322,6 +366,7 @@ impl Model {
 
     pub fn open_prompt(&mut self, kind: PromptKind) {
         self.prompt = match kind {
+            PromptKind::Answer => String::new(),
             PromptKind::Initial => self.pending_prompt.clone().unwrap_or_default(),
             PromptKind::Revision => String::new(),
             PromptKind::Discussion => "Update this step's artifact to incorporate the agreed changes from our interactive discussion. Read the current artifact from disk first. Apply any agreed implementation changes if this is an implementation step. If no changes were agreed, say so; do not invent decisions. Return the complete updated artifact for human review.".into(),
@@ -344,6 +389,9 @@ impl Model {
     }
 
     pub fn submit_prompt(&mut self) -> Option<SubmittedPrompt> {
+        if self.mode == Mode::Prompt(PromptKind::Answer) {
+            return None;
+        }
         let Mode::Prompt(kind) = self.mode else {
             return None;
         };
@@ -353,6 +401,7 @@ impl Model {
         self.prompt_preferred_column = None;
         self.prompt_pending_command = None;
         let submission = match kind {
+            PromptKind::Answer => return None,
             PromptKind::Initial => {
                 self.pending_prompt = (!prompt.is_empty()).then_some(prompt);
                 SubmittedPrompt::Initial
@@ -369,9 +418,16 @@ impl Model {
             Message::ToggleFocus => self.focus = self.focus.next(),
             Message::ToggleDetailView { has_review } => {
                 self.detail_view = match self.detail_view {
+                    DetailView::Decisions if has_review => DetailView::Review,
+                    DetailView::Decisions => DetailView::Artifact,
                     DetailView::Review if has_review => DetailView::Artifact,
                     DetailView::Review => DetailView::Changes,
                     DetailView::Artifact => DetailView::Changes,
+                    DetailView::Changes
+                        if !self.questions.is_empty() || self.decision_error.is_some() =>
+                    {
+                        DetailView::Decisions
+                    }
                     DetailView::Changes if has_review => DetailView::Review,
                     DetailView::Changes => DetailView::Artifact,
                 };
@@ -857,6 +913,30 @@ fn prompt_word_text_object_range(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn decisions_become_default_and_cycle_back_from_changes() {
+        let mut model = super::Model::default();
+        model.load_decisions("# Review\n## D1: Storage?\nStatus: Open\n# Handoff");
+        assert_eq!(model.detail_view, super::DetailView::Decisions);
+        model.update(super::Message::ToggleDetailView { has_review: true });
+        assert_eq!(model.detail_view, super::DetailView::Review);
+        model.detail_view = super::DetailView::Changes;
+        model.update(super::Message::ToggleDetailView { has_review: true });
+        assert_eq!(model.detail_view, super::DetailView::Decisions);
+    }
+
+    #[test]
+    fn answer_editor_restores_draft_without_creating_revision() {
+        let mut model = super::Model::default();
+        model.load_decisions("# Review\n## D1: Storage?\nStatus: Open\n# Handoff");
+        model
+            .decision_drafts
+            .set(&model.questions[0], "TOML".into());
+        model.open_answer();
+        assert_eq!(model.prompt, "TOML");
+        assert_eq!(model.mode, super::Mode::Prompt(super::PromptKind::Answer));
+        assert_eq!(model.submit_prompt(), None);
+    }
     use super::{
         Action, DetailView, Focus, Message, Mode, Model, PromptEditMode, PromptKind,
         PromptOperator, PromptTextObject, PromptWordStyle, SubmittedPrompt,

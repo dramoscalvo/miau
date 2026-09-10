@@ -1,6 +1,7 @@
 //! Ratatui and crossterm adapters.
 
 pub mod channel;
+mod decisions;
 pub mod flow;
 pub mod handoff;
 pub mod help;
@@ -23,7 +24,7 @@ use crate::{
         PromptPendingCommand, PromptTextObject, PromptWordStyle, SubmittedPrompt, artifact_review,
     },
     workflow::{
-        application::{Orchestrator, WorkingTreeRepository},
+        application::{Orchestrator, WorkingTreeRepository, decisions::Drafts},
         domain::{WorkflowConfig, WorkingTreeChange},
         infrastructure::{GitChangeDetector, GitWorkingTree, load_agents, load_workflow},
     },
@@ -338,7 +339,58 @@ impl App {
             },
             None => String::new(),
         };
+        self.ui.load_decisions(&self.artifact);
+        self.ui.decision_drafts = match self.run.as_ref() {
+            Some(run) => Drafts::load(&self.repository, &run.id, self.ui.viewed_node)?,
+            None => Drafts::default(),
+        };
         Ok(())
+    }
+
+    fn save_answer(&mut self) -> Result<()> {
+        if self.ui.mode != Mode::Prompt(PromptKind::Answer) {
+            return Ok(());
+        }
+        if let Some(question) = self.ui.questions.get(self.ui.decision_selected) {
+            self.ui
+                .decision_drafts
+                .set(question, self.ui.prompt.clone());
+            if let Some(run) = self.run.as_ref() {
+                self.ui
+                    .decision_drafts
+                    .save(&self.repository, &run.id, self.ui.viewed_node)?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn submit_answers(&mut self) -> Result<()> {
+        if self.running.is_some()
+            || !self.prompt_ready()
+            || self.selected_prompt_kind() != Some(PromptKind::Revision)
+        {
+            return Ok(());
+        }
+        let previous = self.ui.questions.clone();
+        self.reload_artifact()?;
+        if self.ui.questions != previous {
+            self.ui.error = Some(
+                "Decisions changed on disk. Review the current questions before submitting.".into(),
+            );
+            return Ok(());
+        }
+        let Some(note) = self.ui.decision_drafts.feedback(&self.ui.questions) else {
+            self.ui.error = Some("Enter an answer before submitting.".into());
+            return Ok(());
+        };
+        if let Some(run) = self.run.as_mut() {
+            self.ui.pending_prompt = if self.ui.viewed_node == run.cursor {
+                self.orchestrator.decide(run, Decision::Revise { note })?
+            } else {
+                Some(self.orchestrator.revisit(run, self.ui.viewed_node, note)?)
+            };
+        }
+        self.start_current().await
     }
 
     fn reload_working_tree(&mut self) {
@@ -469,6 +521,9 @@ impl App {
             )
         };
         self.ui.pending_prompt = None;
+        if self.ui.detail_view == DetailView::Decisions {
+            self.ui.detail_view = DetailView::Review;
+        }
         self.ui.mode = Mode::Streaming;
         Ok(())
     }
@@ -575,6 +630,25 @@ impl App {
             }
             Mode::Prompt(_) => {
                 let prompt_width = terminal.size()?.width.saturating_sub(2).max(1) as usize;
+                let answering = self.ui.mode == Mode::Prompt(PromptKind::Answer);
+                if answering && code == KeyCode::Enter {
+                    if self.ui.prompt_edit_mode == PromptEditMode::Insert {
+                        self.ui.update(Message::Input('\n'));
+                        self.save_answer()?;
+                    } else {
+                        self.save_answer()?;
+                        self.ui.cancel_prompt();
+                    }
+                    return Ok(false);
+                }
+                if answering
+                    && code == KeyCode::Esc
+                    && self.ui.prompt_edit_mode == PromptEditMode::Normal
+                {
+                    self.save_answer()?;
+                    self.ui.cancel_prompt();
+                    return Ok(false);
+                }
                 if code == KeyCode::Enter {
                     if let Some(SubmittedPrompt::Revision(note)) = self.ui.submit_prompt() {
                         if let Some(run) = self.run.as_mut() {
@@ -591,6 +665,7 @@ impl App {
 
                 if self.ui.prompt_edit_mode == PromptEditMode::Normal {
                     handle_normal_prompt_key(&mut self.ui, code, prompt_width);
+                    self.save_answer()?;
                     return Ok(false);
                 }
 
@@ -609,6 +684,7 @@ impl App {
                     KeyCode::Char(c) => self.ui.update(Message::Input(c)),
                     _ => {}
                 }
+                self.save_answer()?;
                 return Ok(false);
             }
             _ => {}
@@ -663,6 +739,36 @@ impl App {
                 self.reload_artifact()?;
             }
             KeyCode::Tab => self.ui.update(Message::ToggleFocus),
+            KeyCode::Enter
+                if self.ui.detail_view == DetailView::Decisions && self.prompt_ready() =>
+            {
+                let selected = self.ui.questions.get(self.ui.decision_selected).cloned();
+                self.reload_artifact()?;
+                if selected.as_ref() == self.ui.questions.get(self.ui.decision_selected) {
+                    self.ui.open_answer();
+                } else {
+                    self.ui.error =
+                        Some("Decisions changed on disk. Select an updated question.".into());
+                }
+            }
+            KeyCode::Char('S') if self.ui.detail_view == DetailView::Decisions => {
+                self.submit_answers().await?
+            }
+            KeyCode::Up | KeyCode::Char('k')
+                if self.ui.detail_view == DetailView::Decisions
+                    && self.ui.focus == crate::terminal::application::Focus::Flow =>
+            {
+                self.ui.decision_selected = self.ui.decision_selected.saturating_sub(1);
+                self.ui.flow_scroll = 0;
+            }
+            KeyCode::Down | KeyCode::Char('j')
+                if self.ui.detail_view == DetailView::Decisions
+                    && self.ui.focus == crate::terminal::application::Focus::Flow =>
+            {
+                self.ui.decision_selected =
+                    (self.ui.decision_selected + 1).min(self.ui.questions.len().saturating_sub(1));
+                self.ui.flow_scroll = 0;
+            }
             KeyCode::Up | KeyCode::Char('k')
                 if self.ui.detail_view == DetailView::Changes
                     && self.ui.focus == crate::terminal::application::Focus::Flow =>
@@ -885,7 +991,10 @@ async fn event_loop(
         tokio::select! {
             event = input.next() => if let Some(event) = event { match event? {
                 TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => if app.key(key.code, terminal).await? { break; },
-                TerminalEvent::Paste(text) if matches!(app.ui.mode, Mode::Prompt(_)) => app.ui.update(Message::Paste(text)),
+                TerminalEvent::Paste(text) if matches!(app.ui.mode, Mode::Prompt(_)) => {
+                    app.ui.update(Message::Paste(text));
+                    app.save_answer()?;
+                },
                 TerminalEvent::Resize(_, _) | TerminalEvent::Paste(_) => {},
                 _ => {}
             } },
@@ -942,6 +1051,9 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
                 },
             },
         );
+        if app.ui.detail_view == DetailView::Decisions {
+            decisions::render(frame, areas.flow, &app.ui, app.run.as_ref());
+        }
         channel::render(
             frame,
             areas.channel,
@@ -969,10 +1081,11 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
             can_prompt: app.prompt_ready(),
             can_discuss: app.discuss_ready(),
             can_finish: can_finish(app.run.as_ref(), &app.ui.mode),
-            error: if app
-                .run
-                .as_ref()
-                .is_some_and(|run| run.cursor == app.ui.viewed_node)
+            error: if app.ui.detail_view == DetailView::Decisions
+                || app
+                    .run
+                    .as_ref()
+                    .is_some_and(|run| run.cursor == app.ui.viewed_node)
             {
                 app.ui.error.as_deref()
             } else {

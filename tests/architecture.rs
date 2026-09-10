@@ -12,6 +12,7 @@ fn inner_layers_do_not_depend_on_infrastructure() {
         source.join("execution/application.rs"),
         source.join("execution/domain.rs"),
         source.join("workflow/application.rs"),
+        source.join("workflow/application/decisions.rs"),
         source.join("workflow/domain.rs"),
         source.join("terminal/application.rs"),
     ];

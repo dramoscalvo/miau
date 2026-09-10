@@ -32,6 +32,48 @@ and add a case for an empty input.” You do not need to create a custom feedbac
 in its run directory as `feedback-N.md` (N is the zero-based step index), with numbered versions for later requests.
 These preserve the full text; the activity channel shows only a short summary. Unsent drafts are not persisted.
 
+Decision answers have a dedicated view and persisted drafts. Whenever a selected step's artifact contains open
+decisions, **Decisions** opens by default. Use Up/Down or `j`/`k` to select a question and Enter to edit its answer.
+The view shows each decision's ID and draft status, with the selected question's context, recommendation, and answer
+below. Page Up/Page Down scroll the question and answer. Left/Right still select workflow steps, and `v` cycles through
+Decisions, Review summary, Complete document, and Git changes; views absent from the artifact are skipped.
+
+Answer fields open in Insert mode. Enter inserts a newline; Escape returns to Normal mode, where Enter or Escape
+returns to Decisions. The usual Vim editing commands and multiline clipboard paste work. Each edit saves the draft
+in `decision-drafts-N.json` in the run directory, scoped to the zero-based step index N. Drafts survive navigation and
+restarting miau. This differs from the unsent free-form Request changes box described above.
+
+From Decisions, press uppercase `S` (**Submit answers**) to send all nonblank answers directly to that step's agent.
+Partial answers are allowed. Submission uses Request changes: it saves a versioned feedback file containing the
+questions and answers, resumes the agent when a session is available, and returns the revised artifact for review.
+It does not approve or advance the step. Submission is available only for completed or failed agent steps while no
+process is active. Drafts remain available after submission; the agent should mark answered decisions resolved in the
+updated document. Unanswered decisions remain open.
+
+All agents receive the same decision format in the output contract:
+
+```markdown
+# Review
+## D1: Which storage format should we use?
+Status: Open
+Context: Settings must persist between runs.
+Recommendation: TOML.
+
+## D2: Should existing settings be migrated?
+Status: Resolved
+Answer: Keep the existing format; no migration.
+
+# Handoff
+Additional implementation details.
+```
+
+IDs stay stable within a workflow step's revisions. Only `## D<number>: Question` headings in Review with
+`Status: Open` appear as answer fields; code examples and Handoff are ignored. Duplicate IDs or missing/invalid status
+lines show an error; use `e` at the current gate to correct the artifact or `r` to request a corrected document.
+Artifacts without this format retain the existing document views. Questions are re-read from disk before editing
+and submitting. If the questions changed, miau asks you to review them again. Drafts attach to the full original
+question text, so changed questions start with blank fields; earlier drafts remain preserved on disk.
+
 Editing an artifact changes the document that subsequent agents read. Editing an implementation report does not change
 implementation code, and saving does not approve the step.
 

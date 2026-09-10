@@ -1,5 +1,7 @@
 //! Workflow use cases and prompt assembly.
 
+pub mod decisions;
+
 use crate::{
     execution::domain::{Event, EventKind},
     runs::{

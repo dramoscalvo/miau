@@ -123,6 +123,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
             .map(Line::from)
             .collect::<Vec<_>>();
         let (title, instructions) = match (kind, prompt_edit_mode) {
+            (PromptKind::Answer, PromptEditMode::Normal) => (
+                " Decision answer · saved draft · NORMAL ",
+                " i edit · o/O open line · Enter/Esc back to decisions · S submits from decisions ",
+            ),
+            (PromptKind::Answer, PromptEditMode::Insert) => (
+                " Decision answer · saved draft · INSERT ",
+                " type to edit · Enter newline · Esc normal · answers are sent only with S from decisions ",
+            ),
             (PromptKind::Initial, PromptEditMode::Normal) => (
                 " Initial prompt · NORMAL ",
                 " i/a/I/A insert · o/O open line · hjkl · w/W b/B e/E · x dd/D delete · yy/Y yank · p paste · text objects · 0/^/$ gg/G · Enter save · Esc cancel ",
@@ -180,6 +188,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         };
         if !matches!(mode, Mode::RunList | Mode::Confirm(_)) {
             let view_hints = match detail_view {
+                DetailView::Decisions => {
+                    "↑↓ decisions · Enter answer · S submit answers · v review · PgUp/PgDn scroll"
+                }
                 DetailView::Review if has_review => "v complete document · PgUp/PgDn summary",
                 DetailView::Review => "v changes · PgUp/PgDn document",
                 DetailView::Artifact => "v changes · PgUp/PgDn document",

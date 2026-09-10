@@ -37,6 +37,18 @@ within 150 where practical, with exceptions for syntax-sensitive content such
 as code, tables, and links. This is a writing instruction; persistence does not
 reformat agent output or existing artifacts.
 
+The shared contract gives human questions stable `D1`, `D2`, etc. headings within
+Review, with explicit Open or Resolved status. Workflow application code parses
+these questions independently of agent providers and terminal rendering. The
+terminal presents open questions and edits answer drafts; explicit submission
+uses the existing revision/revisit use case and never approves the workflow.
+Drafts are stored through the artifact repository as `decision-drafts-N.json`,
+scoped to a run and step. Each answer is associated with the full question text,
+preventing reuse when an artifact edit changes the question. Old drafts remain
+on disk. Submission re-reads the artifact and requires review if questions have
+changed since display. The versioned feedback file preserves submitted questions
+and answers before the agent starts. No transcript forwarding is involved.
+
 Workflow nodes may opt into a named session group. At process start, the
 orchestrator selects only the newest captured session from an earlier node with
 the same group and configured agent. The session ID remains part of persisted
@@ -88,6 +100,12 @@ editor handoff. Agent artifact writes use the next unused `_vN` filename and
 never overwrite an existing result. Snapshots use the next unused numbered
 suffix and are never overwritten. A stale `Running` node loaded after a reboot
 becomes a visible failure requiring a human decision.
+
+Mutable artifact-repository writes, including answer drafts, use a sibling
+`.tmp` file followed by rename so a failed write preserves the previous file.
+Versioned agent artifacts and feedback retain their existing exclusive-create
+behavior. Draft save errors propagate through terminal cleanup and are surfaced
+to the operator; the last successfully saved draft remains available.
 
 Human revision requests are preserved in full as versioned `feedback-N.md`
 files in the run directory (N is the zero-based workflow step index), before
