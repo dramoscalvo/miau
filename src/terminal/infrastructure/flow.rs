@@ -29,6 +29,10 @@ pub(crate) fn node_status_label(status: NodeStatus, complete: bool) -> &'static 
     }
 }
 
+fn spinner_frame(spinner: usize) -> &'static str {
+    ["⠋", "⠙", "⠹", "⠸"].get(spinner).copied().unwrap_or("⠋")
+}
+
 fn detail_title(
     status: Option<NodeStatus>,
     complete: bool,
@@ -37,7 +41,7 @@ fn detail_title(
 ) -> String {
     match (status, complete) {
         (Some(NodeStatus::Running), _) => {
-            let spinner = ["⠋", "⠙", "⠹", "⠸"].get(spinner).copied().unwrap_or("⠋");
+            let spinner = spinner_frame(spinner);
             format!(" Working {spinner} · {activity} ")
         }
         (Some(NodeStatus::Done), true) => " Artifact · complete ".into(),
@@ -462,6 +466,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
                             node_status_label(n.status, complete),
                             node_status_style(n.status, complete),
                         ),
+                        Span::styled(
+                            if n.status == NodeStatus::Running {
+                                format!(" {}", spinner_frame(spinner))
+                            } else {
+                                String::new()
+                            },
+                            node_status_style(n.status, complete),
+                        ),
                         Span::from(duration).dark_gray(),
                     ]))
                     .style(if i == viewed_node {
@@ -485,7 +497,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
     let failed = status == Some(NodeStatus::Failed);
     let viewing_current = run.is_some_and(|run| run.cursor == viewed_node);
     let viewing_complete = run.is_some_and(|run| viewed_node < run.cursor);
-    let show_agent_output = viewing_current && !stream.is_empty() && (running || failed);
+    let show_agent_output = viewing_current && (running || (failed && !stream.is_empty()));
     if detail_view == DetailView::Changes {
         render_working_tree(frame, artifact_area, working_tree, focus);
         return;
@@ -494,7 +506,11 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: FlowView<'_>) {
         .then(|| artifact_review(artifact))
         .flatten();
     let mut text = if show_agent_output {
-        stream.join("\n")
+        if stream.is_empty() {
+            "Waiting for agent output…".to_owned()
+        } else {
+            stream.join("\n")
+        }
     } else {
         review.unwrap_or(artifact).to_owned()
     };
@@ -685,7 +701,7 @@ mod tests {
     use crate::{
         execution::application::AgentConfig,
         runs::domain::{ChannelEntry, Node, NodeStatus, Run},
-        terminal::application::{DetailView, Focus},
+        terminal::application::{DetailView, Focus, Message, Model},
         workflow::domain::{WorkingTreeChange, WorkingTreeChangeKind},
     };
     use chrono::{TimeZone, Utc};
@@ -1038,6 +1054,105 @@ mod tests {
             }
         }
         assert!(visible_flow.contains("node9"));
+    }
+
+    #[test]
+    fn working_main_pane_shows_activity_before_output_and_then_live_output() {
+        let run = run_with_status(NodeStatus::Running);
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        for stream in [
+            vec![],
+            vec![
+                "Reading src/main.rs".to_owned(),
+                "Editing the implementation".to_owned(),
+            ],
+        ] {
+            terminal
+                .draw(|frame| {
+                    render(
+                        frame,
+                        frame.area(),
+                        FlowView {
+                            run: Some(&run),
+                            viewed_node: run.cursor,
+                            artifact: "Old artifact contents",
+                            stream: &stream,
+                            scroll: 0,
+                            focus: Focus::Flow,
+                            spinner: 0,
+                            activity: "starting",
+                            detail_view: DetailView::Review,
+                            working_tree: WorkingTreeView::empty(),
+                        },
+                    )
+                })
+                .unwrap();
+            let text = buffer_text(&terminal);
+            assert!(text.contains("Working ⠋ · starting"));
+            assert!(!text.contains("Old artifact contents"));
+            if stream.is_empty() {
+                assert!(text.contains("Waiting for agent output"));
+            } else {
+                assert!(stream.iter().all(|line| text.contains(line)));
+            }
+        }
+    }
+
+    #[test]
+    fn flow_working_indicator_animates_on_ticks_without_agent_output() {
+        let mut terminal = Terminal::new(TestBackend::new(60, 15)).unwrap();
+        let mut ui = Model::default();
+        for status in [
+            NodeStatus::Running,
+            NodeStatus::Done,
+            NodeStatus::Failed,
+            NodeStatus::Pending,
+            NodeStatus::Skipped,
+        ] {
+            let run = run_with_status(status);
+            let mut rows = Vec::new();
+            for _ in 0..5 {
+                terminal
+                    .draw(|frame| {
+                        render(
+                            frame,
+                            frame.area(),
+                            FlowView {
+                                run: Some(&run),
+                                viewed_node: 0,
+                                artifact: "",
+                                stream: &[],
+                                scroll: 0,
+                                focus: Focus::Flow,
+                                spinner: ui.spinner,
+                                activity: "",
+                                detail_view: DetailView::Changes,
+                                working_tree: WorkingTreeView::empty(),
+                            },
+                        )
+                    })
+                    .unwrap();
+                rows.push(
+                    (0..60)
+                        .map(|x| terminal.backend().buffer()[(x, 2)].symbol())
+                        .collect::<String>(),
+                );
+                ui.update(Message::Tick);
+            }
+            if status == NodeStatus::Running {
+                assert!(rows[0].contains("Working"));
+                assert_ne!(
+                    rows[0], rows[1],
+                    "Working must animate even when viewing another step or changes"
+                );
+                assert_eq!(rows[0], rows[4], "animation should repeat");
+            } else {
+                assert!(
+                    rows.iter().all(|row| row == &rows[0]),
+                    "idle statuses must stay still"
+                );
+            }
+        }
     }
 
     #[test]

@@ -312,6 +312,13 @@ pub(crate) fn prompt_cursor_position(text: &str, cursor: usize, width: usize) ->
 }
 
 impl Model {
+    pub fn begin_streaming(&mut self) {
+        self.mode = Mode::Streaming;
+        self.detail_view = DetailView::Review;
+        self.focus = Focus::Flow;
+        self.flow_scroll = 0;
+    }
+
     pub fn load_decisions(&mut self, artifact: &str) {
         self.questions.clear();
         self.decision_error = None;
@@ -941,6 +948,33 @@ mod tests {
         Action, DetailView, Focus, Message, Mode, Model, PromptEditMode, PromptKind,
         PromptOperator, PromptTextObject, PromptWordStyle, SubmittedPrompt,
     };
+
+    #[test]
+    fn starting_work_selects_live_output_from_every_detail_view() {
+        for detail_view in [
+            DetailView::Decisions,
+            DetailView::Review,
+            DetailView::Artifact,
+            DetailView::Changes,
+        ] {
+            let mut model = Model {
+                detail_view,
+                flow_scroll: 12,
+                focus: Focus::Channel,
+                ..Model::default()
+            };
+            model.begin_streaming();
+            assert_eq!(
+                (
+                    model.mode,
+                    model.detail_view,
+                    model.focus,
+                    model.flow_scroll
+                ),
+                (Mode::Streaming, DetailView::Review, Focus::Flow, 0)
+            );
+        }
+    }
 
     #[test]
     fn review_view_cycles_through_full_artifact_and_changes() {

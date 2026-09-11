@@ -521,10 +521,7 @@ impl App {
             )
         };
         self.ui.pending_prompt = None;
-        if self.ui.detail_view == DetailView::Decisions {
-            self.ui.detail_view = DetailView::Review;
-        }
-        self.ui.mode = Mode::Streaming;
+        self.ui.begin_streaming();
         Ok(())
     }
 

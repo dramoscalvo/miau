@@ -109,10 +109,15 @@ run or workflow step.
 The Activity pane follows the newest activity by default. Press Tab to focus it, then use Up, Down, Page Up, or Page
 Down to browse its history; scrolling down returns toward the latest entry.
 
+Starting a step automatically selects live agent output in the main pane, following new output as it arrives.
+Before the first output, the pane shows a waiting message instead of the previous artifact. You can still use `v`
+to inspect changes or Left/Right to view other steps. When the step finishes, its artifact and human decisions return.
 While an agent is running, the output pane title reports its latest normalized activity, such as starting, thinking,
 writing a response, using a tool, or changing a file. Workflow nodes use action-oriented states: `Working` means the
 agent process is active, while `Waiting for you` means the artifact is ready and miau needs your decision. If a run
 fails, its captured output remains visible under `Needs attention` instead of being replaced by an empty artifact.
+An animated spinner beside `Working` in the flow list updates every 100 ms, even when the agent is quiet or you view
+another step or the changes pane. It indicates that the UI is responsive; other node statuses remain still.
 
 When a revisited step finishes, approving it queues the completed following step again, so a revised plan is critiqued
 again before implementation.
