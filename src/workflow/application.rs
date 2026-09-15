@@ -470,6 +470,49 @@ mod tests {
     }
 
     #[test]
+    fn every_role_and_agent_receives_the_decision_contract_on_each_attempt() {
+        let root =
+            std::env::temp_dir().join(format!("miau-decision-prompts-{}", std::process::id()));
+        fs::create_dir_all(root.join("roles")).unwrap();
+        let roles = [
+            ("planner", include_str!("../../roles/planner.md")),
+            ("critic", include_str!("../../roles/critic.md")),
+            ("implementer", include_str!("../../roles/implementer.md")),
+            ("reviewer", include_str!("../../roles/reviewer.md")),
+            ("custom", "Perform a custom task."),
+        ];
+        let orchestrator =
+            Orchestrator::new(FileRepository::new(root.join("runs")), root.join("roles"));
+        for (role, instructions) in roles {
+            fs::write(root.join(format!("roles/{role}.md")), instructions).unwrap();
+            for agent in ["claude", "codex"] {
+                for attempts in [1, 2] {
+                    let mut run = fixture(&root);
+                    let node = &mut run.nodes[1];
+                    node.role = role.into();
+                    node.agent = agent.into();
+                    node.attempts = attempts;
+                    node.session_id = (attempts > 1).then(|| "existing-session".into());
+                    let prompt = orchestrator.assemble_prompt(&run, None).unwrap();
+                    assert!(prompt.contains(instructions));
+                    assert!(prompt.ends_with(include_str!("artifact-contract.md")));
+                    let example = prompt
+                        .split_once("```markdown\n")
+                        .and_then(|(_, rest)| rest.split_once("\n```"))
+                        .map(|(example, _)| example)
+                        .expect("every prompt needs an executable decision-format example");
+                    let questions = decisions::parse(example).unwrap();
+                    assert_eq!(questions.len(), 1, "{role}/{agent}/attempt {attempts}");
+                    assert_eq!(questions[0].id, "D1");
+                    assert!(questions[0].question.contains("Recommendation:"));
+                    assert!(prompt.contains("native question tools"));
+                }
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn plan_prompt_requests_the_minimal_implementation_for_the_goal() {
         let root = std::env::temp_dir().join(format!("miau-plan-prompt-{}", std::process::id()));
         fs::create_dir_all(root.join("roles")).unwrap();

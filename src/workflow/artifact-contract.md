@@ -17,7 +17,10 @@ when unchanged. Report verification as passed, failed, or not run, with commands
 and evidence references. Scenarios alone are not executed tests. Include a small
 text diagram only when relationships or execution order need explaining.
 For critique/review, prioritize findings with severity and evidence over repeating
-the plan. Human decisions remain with the operator.
+the plan. Human decisions remain with the operator. If a finding needs a human
+choice, request that choice using the decision format below and reference the
+finding's severity/evidence in its context. Recommending an option for a question
+is allowed; approving or rejecting the workflow step belongs to the operator.
 
 For every role and agent, put questions requiring human input in Review as
 second-level headings: `## D1: Question?`, `## D2: Question?`, and so on. Each
@@ -32,6 +35,34 @@ answered decisions `Status: Resolved`, and record `Answer: ...`. Keep unanswered
 decisions `Status: Open`; partial answers do not authorize guessing the rest.
 Do not invent questions when no human input is needed. Answer submission is not
 workflow approval. These decision details may exceed the Review length target.
+
+This is miau's human-feedback interface for every role, including custom roles,
+on both initial and resumed runs. Questions in prose, lists, tables, Handoff,
+intermediate messages, or native question tools do not create answer fields in
+miau. Put every request for clarification, permission, or a product/scope choice
+in the final artifact using the exact headings and plain status lines above.
+Do not rely on an interactive tool to obtain an answer during this run. If work
+is blocked on human input, return the artifact with the open decisions and state
+what is blocked; wait for the operator's answers before doing the dependent work.
+
+Example (replace the sample question and context; emit the artifact without the
+surrounding code fence):
+
+```markdown
+# Review
+## D1: Should the migration preserve existing settings?
+Status: Open
+Context: The plan does not specify how to handle existing settings.
+Options: Preserve existing settings, or reset them to defaults.
+Recommendation: Preserve existing settings to avoid losing user configuration.
+
+# Handoff
+Migration behavior is blocked on D1.
+```
+
+Before returning, check that every request for human input has a unique stable
+`## D<number>: Question` heading directly inside `# Review` (not nested under a
+findings heading), exactly one plain status line, and enough context to answer.
 
 In Handoff, record only additional information the next agent needs: relevant
 paths/symbols, constraints, non-obvious decisions and their reasons, unresolved

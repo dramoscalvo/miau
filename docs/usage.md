@@ -50,7 +50,12 @@ It does not approve or advance the step. Submission is available only for comple
 process is active. Drafts remain available after submission; the agent should mark answered decisions resolved in the
 updated document. Unanswered decisions remain open.
 
-All agents receive the same decision format in the output contract:
+All agents and roles, including critique and custom roles, receive the same decision format on initial and resumed
+runs. Findings that require a human choice must include a decision in Review. Recommendations are allowed; approval
+remains with the operator. Agents blocked on an answer should return an artifact with open decisions before continuing
+dependent work. Free-form questions and native CLI question tools do not create miau answer fields.
+
+The output contract includes this decision format:
 
 ```markdown
 # Review

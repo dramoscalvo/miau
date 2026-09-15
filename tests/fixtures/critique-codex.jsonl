@@ -1,0 +1,3 @@
+{"type":"thread.started","thread_id":"critique-session"}
+{"type":"item.completed","item":{"type":"agent_message","text":"# Review\n## Findings\nHigh: The migration plan does not define how existing settings are handled.\n\n## D1: Preserve existing settings?\nStatus: Open\nContext: Resetting settings would discard user configuration.\nRecommendation: Preserve settings.\n\n# Handoff\nMigration behavior is blocked on D1.\n"}}
+{"type":"turn.completed"}
