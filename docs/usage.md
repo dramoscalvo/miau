@@ -10,7 +10,7 @@ Before starting a pending node, press `p`, type an initial prompt, and press Ent
 the node. After an agent finishes, `r` opens **Request changes** and Enter sends it immediately. `p` remains an alias.
 Before a step starts, `r` also opens the initial prompt box. The box opens in Vim-style Normal mode and wraps and grows
 to one-third of the window. Use `i`, `a`, `I`, or `A` to enter Insert mode, or `o`/`O` to open a new line below/above
-the current line; `Esc` returns to Normal mode. In Normal mode, `h`, `j`, `k`, `l` (or the arrow keys) move the cursor;
+the current line; `Esc` or `Ctrl+C` returns to Normal mode. In Normal mode, `h`, `j`, `k`, `l` (or the arrow keys) move the cursor;
 `w`/`b`/`e` move by word; and `W`/`B`/`E` move by whitespace-delimited WORD. Use `0`, `^`, and `$` for line boundaries,
 `gg`/`G` for document boundaries, and `x` to delete a character. Use `dd` to delete the current line, `D` to delete
 through the end of the line, `yy` or `Y` to yank the current line, and `p` to paste the last yanked or deleted text. The
@@ -38,7 +38,7 @@ The view shows each decision's ID and draft status, with the selected question's
 below. Page Up/Page Down scroll the question and answer. Left/Right still select workflow steps, and `v` cycles through
 Decisions, Review summary, Complete document, and Git changes; views absent from the artifact are skipped.
 
-Answer fields open in Insert mode. Enter inserts a newline; Escape returns to Normal mode, where Enter or Escape
+Answer fields open in Insert mode. Enter inserts a newline; Escape or Ctrl+C returns to Normal mode, where Enter or Escape
 returns to Decisions. The usual Vim editing commands and multiline clipboard paste work. Each edit saves the draft
 in `decision-drafts-N.json` in the run directory, scoped to the zero-based step index N. Drafts survive navigation and
 restarting miau. This differs from the unsent free-form Request changes box described above.

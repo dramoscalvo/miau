@@ -129,7 +129,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
             ),
             (PromptKind::Answer, PromptEditMode::Insert) => (
                 " Decision answer · saved draft · INSERT ",
-                " type to edit · Enter newline · Esc normal · answers are sent only with S from decisions ",
+                " type to edit · Enter newline · Esc/Ctrl+C normal · answers are sent only with S from decisions ",
             ),
             (PromptKind::Initial, PromptEditMode::Normal) => (
                 " Initial prompt · NORMAL ",
@@ -145,15 +145,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
             ),
             (PromptKind::Discussion, PromptEditMode::Insert) => (
                 " Back from discussion · edit update request ",
-                " Enter request update · Esc normal ",
+                " Enter request update · Esc/Ctrl+C normal ",
             ),
             (PromptKind::Initial, PromptEditMode::Insert) => (
                 " Initial prompt · INSERT ",
-                " type to edit · Backspace/Delete remove · Enter save · Esc normal ",
+                " type to edit · Backspace/Delete remove · Enter save · Esc/Ctrl+C normal ",
             ),
             (PromptKind::Revision, PromptEditMode::Insert) => (
                 " Request changes · INSERT ",
-                " type to edit · Backspace/Delete remove · Enter send · Esc normal ",
+                " type to edit · Backspace/Delete remove · Enter send · Esc/Ctrl+C normal ",
             ),
         };
         frame.render_widget(

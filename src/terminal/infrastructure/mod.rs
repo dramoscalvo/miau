@@ -34,7 +34,7 @@ use chrono::Utc;
 use crossterm::{
     event::{
         EnableBracketedPaste, EnableMouseCapture, Event as TerminalEvent, EventStream, KeyCode,
-        KeyEventKind,
+        KeyEvent, KeyEventKind, KeyModifiers,
     },
     execute,
     terminal::{EnterAlternateScreen, enable_raw_mode},
@@ -108,6 +108,27 @@ fn prompt_kind(run: Option<&Run>, viewed_node: usize) -> Option<PromptKind> {
         NodeStatus::Pending if viewed_node == run.cursor => Some(PromptKind::Initial),
         NodeStatus::Done | NodeStatus::Failed => Some(PromptKind::Revision),
         NodeStatus::Pending | NodeStatus::Running | NodeStatus::Skipped => None,
+    }
+}
+
+fn handle_insert_prompt_key(ui: &mut Model, key: KeyEvent, prompt_width: usize) {
+    match key.code {
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            ui.update(Message::LeavePromptInsertMode);
+        }
+        KeyCode::Esc => ui.update(Message::LeavePromptInsertMode),
+        KeyCode::Backspace => ui.update(Message::Backspace),
+        KeyCode::Delete => ui.update(Message::DeletePromptCharacter),
+        KeyCode::Left => ui.update(Message::MovePromptLeft),
+        KeyCode::Right => ui.update(Message::MovePromptRight),
+        KeyCode::Up => ui.update(Message::MovePromptUp {
+            width: prompt_width,
+        }),
+        KeyCode::Down => ui.update(Message::MovePromptDown {
+            width: prompt_width,
+        }),
+        KeyCode::Char(c) => ui.update(Message::Input(c)),
+        _ => {}
     }
 }
 
@@ -597,9 +618,10 @@ impl App {
 
     async fn key(
         &mut self,
-        code: KeyCode,
+        key: KeyEvent,
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     ) -> Result<bool> {
+        let code = key.code;
         match &self.ui.mode {
             Mode::Confirm(action) => {
                 let action = *action;
@@ -666,21 +688,7 @@ impl App {
                     return Ok(false);
                 }
 
-                match code {
-                    KeyCode::Esc => self.ui.update(Message::LeavePromptInsertMode),
-                    KeyCode::Backspace => self.ui.update(Message::Backspace),
-                    KeyCode::Delete => self.ui.update(Message::DeletePromptCharacter),
-                    KeyCode::Left => self.ui.update(Message::MovePromptLeft),
-                    KeyCode::Right => self.ui.update(Message::MovePromptRight),
-                    KeyCode::Up => self.ui.update(Message::MovePromptUp {
-                        width: prompt_width,
-                    }),
-                    KeyCode::Down => self.ui.update(Message::MovePromptDown {
-                        width: prompt_width,
-                    }),
-                    KeyCode::Char(c) => self.ui.update(Message::Input(c)),
-                    _ => {}
-                }
+                handle_insert_prompt_key(&mut self.ui, key, prompt_width);
                 self.save_answer()?;
                 return Ok(false);
             }
@@ -987,7 +995,7 @@ async fn event_loop(
         terminal.draw(|frame| draw(frame, app))?;
         tokio::select! {
             event = input.next() => if let Some(event) = event { match event? {
-                TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => if app.key(key.code, terminal).await? { break; },
+                TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => if app.key(key, terminal).await? { break; },
                 TerminalEvent::Paste(text) if matches!(app.ui.mode, Mode::Prompt(_)) => {
                     app.ui.update(Message::Paste(text));
                     app.save_answer()?;
@@ -1097,15 +1105,15 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::{
-        can_finish, confirmation_result_mode, handle_normal_prompt_key, prompt_kind,
-        returns_to_run_list,
+        can_finish, confirmation_result_mode, handle_insert_prompt_key, handle_normal_prompt_key,
+        prompt_kind, returns_to_run_list,
     };
     use crate::{
         runs::domain::{Node, NodeStatus, Run},
         terminal::application::{Action, Message, Mode, Model, PromptEditMode, PromptKind},
     };
     use chrono::Utc;
-    use crossterm::event::KeyCode;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     #[test]
     fn b_returns_to_run_list_only_from_a_project_gate() {
@@ -1139,6 +1147,52 @@ mod tests {
         assert_eq!(
             confirmation_result_mode(Action::Finish, true),
             Some(Mode::Gate)
+        );
+    }
+
+    #[test]
+    fn escape_and_ctrl_c_leave_prompt_insert_mode_without_changing_text() {
+        for kind in [
+            PromptKind::Initial,
+            PromptKind::Revision,
+            PromptKind::Answer,
+            PromptKind::Discussion,
+        ] {
+            for key in [
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            ] {
+                let mut model = Model::default();
+                model.open_prompt(kind);
+                model.update(Message::EnterPromptInsertMode);
+                model.update(Message::Paste("draft".into()));
+                let draft = model.prompt.clone();
+
+                handle_insert_prompt_key(&mut model, key, 80);
+
+                assert_eq!(
+                    (model.mode, model.prompt_edit_mode, model.prompt.as_str()),
+                    (Mode::Prompt(kind), PromptEditMode::Normal, draft.as_str())
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn plain_c_is_inserted_in_prompt_insert_mode() {
+        let mut model = Model::default();
+        model.open_prompt(PromptKind::Initial);
+        model.update(Message::EnterPromptInsertMode);
+
+        handle_insert_prompt_key(
+            &mut model,
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE),
+            80,
+        );
+
+        assert_eq!(
+            (model.prompt_edit_mode, model.prompt.as_str()),
+            (PromptEditMode::Insert, "c")
         );
     }
 
