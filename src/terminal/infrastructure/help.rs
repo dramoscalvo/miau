@@ -188,16 +188,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         };
         if !matches!(mode, Mode::RunList | Mode::Confirm(_)) {
             let view_hints = match detail_view {
+                DetailView::Diagram => {
+                    "v next view · j/k nodes · Enter child · Backspace parent · ] source · o open · R reload · PgUp/PgDn details"
+                }
                 DetailView::Decisions => {
                     "↑↓ decisions · Enter answer · S submit answers · v review · PgUp/PgDn scroll"
                 }
                 DetailView::Review if has_review => "v complete document · PgUp/PgDn summary",
                 DetailView::Review => "v changes · PgUp/PgDn document",
                 DetailView::Artifact => "v changes · PgUp/PgDn document",
-                DetailView::Changes if has_review => {
-                    "v review summary · j/k files · PgUp/PgDn diff"
-                }
-                DetailView::Changes => "v complete document · j/k files · PgUp/PgDn diff",
+                DetailView::Changes => "v next view · j/k files · PgUp/PgDn diff",
             };
             hints = format!("{hints} · {view_hints}");
         }

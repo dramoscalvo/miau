@@ -1,5 +1,8 @@
 //! Persistence ports used by run and workflow use cases.
 
+pub mod diagram;
+pub mod generate_diagram;
+
 use std::{
     io,
     path::{Path, PathBuf},

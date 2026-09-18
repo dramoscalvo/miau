@@ -1,5 +1,7 @@
 //! Terminal interaction model shared by input and rendering adapters.
 
+pub mod diagram;
+
 use crate::workflow::application::decisions::{self, Drafts, Question};
 use unicode_width::UnicodeWidthChar;
 
@@ -93,6 +95,7 @@ pub enum DetailView {
     Review,
     Artifact,
     Changes,
+    Diagram,
 }
 
 /// Extract the human section without interpreting headings inside code fences.
@@ -137,6 +140,7 @@ impl Focus {
 
 #[derive(Debug, Clone)]
 pub struct Model {
+    pub diagram: diagram::Diagram,
     pub questions: Vec<Question>,
     pub decision_drafts: Drafts,
     pub decision_selected: usize,
@@ -164,6 +168,7 @@ pub struct Model {
 impl Default for Model {
     fn default() -> Self {
         Self {
+            diagram: diagram::Diagram::default(),
             questions: Vec::new(),
             decision_drafts: Drafts::default(),
             decision_selected: 0,
@@ -192,6 +197,11 @@ impl Default for Model {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
+    DiagramPrevious,
+    DiagramNext,
+    DiagramChild,
+    DiagramParent,
+    DiagramNextSource,
     Tick,
     ToggleFocus,
     ToggleDetailView {
@@ -349,6 +359,7 @@ impl Model {
     }
 
     pub fn return_to_run_list(&mut self) {
+        self.diagram = diagram::Diagram::default();
         self.questions.clear();
         self.decision_drafts = Drafts::default();
         self.decision_error = None;
@@ -421,6 +432,23 @@ impl Model {
 
     pub fn update(&mut self, message: Message) {
         match message {
+            Message::DiagramPrevious => {
+                self.diagram.move_selection(false);
+                self.flow_scroll = 0;
+            }
+            Message::DiagramNext => {
+                self.diagram.move_selection(true);
+                self.flow_scroll = 0;
+            }
+            Message::DiagramChild => {
+                self.diagram.child();
+                self.flow_scroll = 0;
+            }
+            Message::DiagramParent => {
+                self.diagram.parent();
+                self.flow_scroll = 0;
+            }
+            Message::DiagramNextSource => self.diagram.next_source(),
             Message::Tick => self.spinner = (self.spinner + 1) % 4,
             Message::ToggleFocus => self.focus = self.focus.next(),
             Message::ToggleDetailView { has_review } => {
@@ -430,13 +458,14 @@ impl Model {
                     DetailView::Review if has_review => DetailView::Artifact,
                     DetailView::Review => DetailView::Changes,
                     DetailView::Artifact => DetailView::Changes,
-                    DetailView::Changes
+                    DetailView::Changes if self.diagram.available() => DetailView::Diagram,
+                    DetailView::Changes | DetailView::Diagram
                         if !self.questions.is_empty() || self.decision_error.is_some() =>
                     {
                         DetailView::Decisions
                     }
-                    DetailView::Changes if has_review => DetailView::Review,
-                    DetailView::Changes => DetailView::Artifact,
+                    DetailView::Changes | DetailView::Diagram if has_review => DetailView::Review,
+                    DetailView::Changes | DetailView::Diagram => DetailView::Artifact,
                 };
                 self.flow_scroll = 0;
                 self.change_scroll = 0;

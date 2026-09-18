@@ -36,7 +36,7 @@ Decision answers have a dedicated view and persisted drafts. Whenever a selected
 decisions, **Decisions** opens by default. Use Up/Down or `j`/`k` to select a question and Enter to edit its answer.
 The view shows each decision's ID and draft status, with the selected question's context, recommendation, and answer
 below. Page Up/Page Down scroll the question and answer. Left/Right still select workflow steps, and `v` cycles through
-Decisions, Review summary, Complete document, and Git changes; views absent from the artifact are skipped.
+Decisions, Review summary, Complete document, Git changes, and Diagram; views absent from the artifact are skipped.
 
 Answer fields open in Insert mode. Enter inserts a newline; Escape or Ctrl+C returns to Normal mode, where Enter or Escape
 returns to Decisions. The usual Vim editing commands and multiline clipboard paste work. Each edit saves the draft
@@ -98,13 +98,22 @@ completed or failed agent, press `r` to request changes from the prompt box and 
 available. This re-queues that workflow step while preserving the results of later steps, which will be offered again in
 order. Press `d` to open that agent's captured session interactively without changing workflow state.
 
-The project detail area starts with **Review summary**, showing only the selected agent's `# Review` section. Press `v`
+When there are no open decisions, the project detail area starts with **Review summary**, showing the selected
+step's `# Review` section. Press `v`
 to cycle through **Review summary**, **Complete document** (the same review plus `# Handoff` details for the next
 agent), and the project's live Git working tree. Use Up/Down or Page Up/Page Down to scroll document text when it
 exceeds the pane. Old or incomplete artifacts without a separate review section show **Complete document**; `v` switches
 directly between that document and Git changes, skipping the duplicate summary view. Editing still opens the single
 canonical artifact, and the preview reloads after the editor returns. The one-screen target is guidance, not a
-truncation or approval rule; diagrams and Gherkin are displayed as text, and scenarios are not automatically executed.
+truncation or approval rule. Ordinary diagrams and Gherkin remain text, and scenarios are not automatically executed.
+An optional `miau-graph` block in Handoff adds the navigable [Diagram view](diagrams.md) after Git changes.
+
+For TypeScript projects, add a [diagram command step](configuration.md#add-a-typescript-diagram-step) to generate a
+compiler-resolved module dependency snapshot without an agent. In Diagram, use `j`/`k` to select a node, Enter or
+Backspace to navigate its hierarchy, `]` to cycle source references, and `o` to open the selected file in `$EDITOR`
+once the process has stopped. The header shows the cited line; the editor opens at its default position. `R` reloads
+the stored artifact, not the project source. Regenerate the artifact after source changes; browsing, opening files,
+and reloading never approve the step. See the [diagram guide](diagrams.md) for extraction warnings and provenance.
 
 The live Git tree marks added files in green, modified files in yellow, deleted files in red, and renamed files in cyan.
 Use `j`/`k` or Up/Down to select a file and Page Up/Page Down to scroll its unified diff. This view reports all current

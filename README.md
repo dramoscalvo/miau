@@ -30,7 +30,7 @@ Enter to save, and `s` to start the step. After each agent finishes, choose what
 | `r` | Request changes; Enter submits feedback and starts a new artifact version. |
 | `d` | Discuss in the agent's interactive session, then optionally request an updated artifact. |
 | `e` | Edit the artifact in `$EDITOR`; saving does not approve the step. |
-| `v` | Cycle through Review summary, Complete document, and live Git changes. |
+| `v` | Cycle through Decisions, Review, Complete document, Git changes, and optional Diagram views. |
 | Left / Right | Browse workflow agents and their artifacts. |
 | `x` | Stop the running agent after confirmation. |
 | `f` | Finish the run after confirmation, skipping unfinished steps. |
@@ -39,6 +39,25 @@ Enter to save, and `s` to start the step. After each agent finishes, choose what
 Run data stays in the project's `miaus/` directory. Revisions preserve prior artifact versions, and later agents read
 current artifact files from disk. See the [usage guide](docs/usage.md) for prompt editing, discussions, navigation,
 and revisiting steps.
+
+## Architecture diagrams
+
+Extract a TypeScript project's module dependencies into a review artifact:
+
+```sh
+miau diagram typescript --project tsconfig.json --root . --output architecture.md
+```
+
+Generation needs Node.js 18+ and TypeScript 5.6–6.x installed in the target project. It uses the compiler's parser and
+module resolution, with no agent, model, or API key. Unchanged inputs and compiler/runtime environment produce the
+same sorted output; source references, extraction warnings, and an input fingerprint accompany the graph.
+The command creates a new file and refuses to overwrite one. This milestone extracts module dependencies, not classes
+or runtime behavior.
+
+Add it as an optional [workflow command step](docs/configuration.md#add-a-typescript-diagram-step) to review the result
+in miau. Press `v` to reach Diagram, browse the file hierarchy and relationships, and open cited sources in your editor.
+Every workflow gate still waits for your decision. The [diagram guide](docs/diagrams.md) covers setup, reproducibility,
+controls, limitations, and the optional artifact format for proposed designs.
 
 ## Configuration
 

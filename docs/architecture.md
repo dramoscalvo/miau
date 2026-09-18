@@ -60,6 +60,38 @@ layer contains the pure `Model`, `Message`, and `Model::update` state machine.
 Its infrastructure layer owns EventStream input, ratatui rendering, terminal
 handoff, and effectful calls into the other contexts.
 
+Optional artifact diagrams use value types in `runs/domain/diagram` and a pure
+Handoff-fence parser and validator in `runs/application/diagram`. They are part
+of the canonical Markdown artifact and its existing version history, with no
+additional persisted state. Terminal application code owns hierarchy selection
+and the `SourceRepository` port; terminal infrastructure renders relationships,
+resolves source files within the project, and performs the editor handoff.
+Diagram reloads replace cached data, including clearing stale graphs on parse
+errors. Before opening a source, the artifact is reread and the selected node
+and reference are checked again. Diagram actions never invoke workflow decisions
+or agent execution. Observed diagrams require edge source references and are
+labelled extractor-reported when provenance is present, otherwise agent-reported.
+Parsing does not establish their factual correctness or authenticate metadata. See the
+[diagram guide](diagrams.md) for the schema, limits, and interaction model.
+
+The `runs/application/generate_diagram` use case accepts a `DiagramExtractor`
+port and validates its observed graph before returning a Markdown artifact.
+The TypeScript infrastructure adapter starts one Node process with an embedded
+script and the target project's compiler package. Compiler resolution and AST
+walking produce source-backed edges; source text is never sent to a model.
+The standalone CLI writes stdout or a new output file and never changes run
+state. A configured command workflow node can persist that stdout through the
+normal versioned-artifact lifecycle. Optional provenance records deterministic
+input fingerprints and warnings but is not an authenticity guarantee.
+
+Determinism belongs to extraction: the compiler resolves module specifiers, the
+extractor orders nodes and edges stably, and provenance fingerprints the inputs
+read during extraction. Identical inputs and compiler/runtime environment yield
+identical output, including across relocated checkouts. Agent explanations and
+proposed designs are separate, nondeterministic content. Stored graphs are
+snapshots; viewing or editing source files does not regenerate them. This keeps
+generation explicit and the human decision gate independent of graph content.
+
 ## Dependency rules
 
 Allowed:

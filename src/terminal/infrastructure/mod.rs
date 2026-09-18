@@ -2,11 +2,13 @@
 
 pub mod channel;
 mod decisions;
+mod diagram;
 pub mod flow;
 pub mod handoff;
 pub mod help;
 pub mod layout;
 mod pane;
+mod sources;
 
 use crate::{
     execution::{
@@ -22,6 +24,7 @@ use crate::{
     terminal::application::{
         Action, DetailView, Message, Mode, Model, PromptEditMode, PromptKind, PromptOperator,
         PromptPendingCommand, PromptTextObject, PromptWordStyle, SubmittedPrompt, artifact_review,
+        diagram::SourceRepository,
     },
     workflow::{
         application::{Orchestrator, WorkingTreeRepository, decisions::Drafts},
@@ -77,6 +80,17 @@ struct App {
 
 fn returns_to_run_list(code: KeyCode, mode: &Mode) -> bool {
     code == KeyCode::Char('b') && matches!(mode, Mode::Gate)
+}
+
+fn diagram_message(code: KeyCode) -> Option<Message> {
+    match code {
+        KeyCode::Up | KeyCode::Char('k') => Some(Message::DiagramPrevious),
+        KeyCode::Down | KeyCode::Char('j') => Some(Message::DiagramNext),
+        KeyCode::Enter => Some(Message::DiagramChild),
+        KeyCode::Backspace => Some(Message::DiagramParent),
+        KeyCode::Char(']') => Some(Message::DiagramNextSource),
+        _ => None,
+    }
 }
 
 fn can_finish(run: Option<&Run>, mode: &Mode) -> bool {
@@ -361,6 +375,7 @@ impl App {
             None => String::new(),
         };
         self.ui.load_decisions(&self.artifact);
+        self.ui.diagram.load(&self.artifact);
         self.ui.decision_drafts = match self.run.as_ref() {
             Some(run) => Drafts::load(&self.repository, &run.id, self.ui.viewed_node)?,
             None => Drafts::default(),
@@ -726,6 +741,9 @@ impl App {
                 self.return_to_run_list();
             }
             KeyCode::Char('v') => {
+                let view = self.ui.detail_view;
+                self.reload_artifact()?;
+                self.ui.detail_view = view;
                 self.ui.update(Message::ToggleDetailView {
                     has_review: artifact_review(&self.artifact).is_some(),
                 });
@@ -733,6 +751,7 @@ impl App {
             }
             KeyCode::Left => {
                 self.ui.update(Message::ViewPreviousNode);
+                self.ui.diagram = Default::default();
                 self.reload_artifact()?;
             }
             KeyCode::Right => {
@@ -741,9 +760,26 @@ impl App {
                     .as_ref()
                     .map_or(0, |run| run.nodes.len().saturating_sub(1));
                 self.ui.update(Message::ViewNextNode { last });
+                self.ui.diagram = Default::default();
                 self.reload_artifact()?;
             }
             KeyCode::Tab => self.ui.update(Message::ToggleFocus),
+            KeyCode::Char('R') if self.ui.detail_view == DetailView::Diagram => {
+                self.reload_artifact()?;
+                self.ui.detail_view = DetailView::Diagram;
+                self.ui.error = None;
+            }
+            KeyCode::Char('o') if self.ui.detail_view == DetailView::Diagram => {
+                self.open_diagram_source(terminal)?;
+            }
+            _ if self.ui.detail_view == DetailView::Diagram
+                && self.ui.focus == crate::terminal::application::Focus::Flow
+                && diagram_message(code).is_some() =>
+            {
+                if let Some(message) = diagram_message(code) {
+                    self.ui.update(message);
+                }
+            }
             KeyCode::Enter
                 if self.ui.detail_view == DetailView::Decisions && self.prompt_ready() =>
             {
@@ -919,6 +955,65 @@ impl App {
         result?;
         Ok(())
     }
+
+    fn open_diagram_source(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    ) -> Result<()> {
+        let Some(path) = self.diagram_source_path()? else {
+            return Ok(());
+        };
+        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
+        let mut command = Command::new(editor);
+        command.arg(path);
+        let result = handoff::run(terminal, &mut command);
+        self.reload_artifact()?;
+        self.ui.detail_view = DetailView::Diagram;
+        self.ui.error = if result?.success() {
+            None
+        } else {
+            Some("Source editor exited unsuccessfully.".into())
+        };
+        Ok(())
+    }
+
+    fn diagram_source_path(&mut self) -> Result<Option<PathBuf>> {
+        if self.running.is_some() {
+            self.ui.error =
+                Some("Source opening is available after the active process stops.".into());
+            return Ok(None);
+        }
+        let selected_id = self.ui.diagram.selected_node().map(|node| node.id.clone());
+        let selected = self.ui.diagram.selected_source().cloned();
+        self.reload_artifact()?;
+        self.ui.detail_view = DetailView::Diagram;
+        let Some(source) = selected else {
+            self.ui.error = Some("This node has no source reference.".into());
+            return Ok(None);
+        };
+        if self.ui.diagram.selected_source() != Some(&source)
+            || self.ui.diagram.selected_node().map(|node| &node.id) != selected_id.as_ref()
+        {
+            self.ui.error =
+                Some("Diagram changed on disk. Review the source selection before opening.".into());
+            return Ok(None);
+        }
+        let Some(run) = &self.run else {
+            return Ok(None);
+        };
+        let path = match sources::ProjectSources.resolve(&run.project, &source) {
+            Ok(path) => path,
+            Err(error) => {
+                self.ui.error = Some(format!(
+                    "Cannot open {}:{}: {error}",
+                    source.file, source.line
+                ));
+                return Ok(None);
+            }
+        };
+        self.ui.error = None;
+        Ok(Some(path))
+    }
     fn discuss(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         let run = self.run.as_ref().ok_or_else(|| anyhow!("no run"))?;
         let node = run
@@ -1059,6 +1154,14 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
         if app.ui.detail_view == DetailView::Decisions {
             decisions::render(frame, areas.flow, &app.ui, app.run.as_ref());
         }
+        if app.ui.detail_view == DetailView::Diagram {
+            let step = app
+                .run
+                .as_ref()
+                .and_then(|run| run.nodes.get(app.ui.viewed_node))
+                .map_or("", |node| node.name.as_str());
+            diagram::render(frame, areas.flow, &app.ui, step);
+        }
         channel::render(
             frame,
             areas.channel,
@@ -1086,11 +1189,13 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
             can_prompt: app.prompt_ready(),
             can_discuss: app.discuss_ready(),
             can_finish: can_finish(app.run.as_ref(), &app.ui.mode),
-            error: if app.ui.detail_view == DetailView::Decisions
-                || app
-                    .run
-                    .as_ref()
-                    .is_some_and(|run| run.cursor == app.ui.viewed_node)
+            error: if matches!(
+                app.ui.detail_view,
+                DetailView::Decisions | DetailView::Diagram
+            ) || app
+                .run
+                .as_ref()
+                .is_some_and(|run| run.cursor == app.ui.viewed_node)
             {
                 app.ui.error.as_deref()
             } else {

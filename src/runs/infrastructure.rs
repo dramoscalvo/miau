@@ -1,5 +1,7 @@
 //! Filesystem persistence adapters for runs and artifacts.
 
+pub mod typescript;
+
 use super::{
     application::{ArtifactRepository, RepositoryError, RunRepository, TextRepository},
     domain::Run,

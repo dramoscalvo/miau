@@ -28,6 +28,11 @@ preview in the background; stop it with `npm run preview -- stop` when finished.
 project prefix, image assets, language switching, translations, and search and accessibility metadata. Also inspect
 desktop and mobile layouts when changing presentation.
 
+The TypeScript diagram section links to `docs/diagrams.md` on GitHub and shows a runnable extraction command.
+Keep both languages aligned with that guide: generation needs Node and the project's TypeScript compiler, requires
+no model, and covers module dependencies. Its reproducibility claim assumes unchanged inputs and compiler/runtime
+environment. The website documents the terminal feature; it does not run the extractor in the browser.
+
 The shared page is in `src/components/Landing.astro`, styles in `src/styles/global.css`, and
 original SVG artwork in `public/`. Terminal images are labelled illustrations
 with example content, not captured screenshots. Keep their behaviour consistent

@@ -49,7 +49,12 @@ agent = "claude"
 role = "planner"
 writes = "plan.md"
 
-[[nodes]] name = "critique" agent = "codex" session_group = "delivery" role = "critic" writes = "critique.md"
+[[nodes]]
+name = "critique"
+agent = "codex"
+session_group = "delivery"
+role = "critic"
+writes = "critique.md"
 
 [[nodes]]
 name = "implement"
@@ -85,6 +90,33 @@ Use a group for closely related steps and leave unrelated or independence-sensit
 
 Agent artifacts are append-only. Re-running a completed node keeps its prior output and writes the next version beside
 it, such as `plan_v2.md` and `plan_v3.md`. The run state and later workflow nodes use the newest version.
+
+## Add a TypeScript diagram step
+
+Insert this optional command node where a source snapshot helps your review, for example after implementation and
+before the final agent review:
+
+```toml
+[[nodes]]
+name = "architecture"
+command = ["miau", "diagram", "typescript", "--project", "tsconfig.json", "--root", "."]
+writes = "architecture.md"
+```
+
+The command runs in the project's directory. Install `miau` and Node.js 18+ on `PATH`, and install the project's locked
+dependencies, including TypeScript 5.6–6.x. Omit `--output`: miau captures stdout as the node's versioned artifact.
+Command nodes need no `agent` or `role`; this one uses no model or API key and leaves the default workflow unchanged
+until you configure it. Workflow changes apply to newly created runs.
+
+Start the step with `s`, inspect its report and Diagram view with `v`, then approve with `a` when ready to continue.
+Completion of extraction does not approve the result. Keep `--root` as the run's project directory so source links
+resolve correctly. For a monorepo, choose a leaf config such as `packages/app/tsconfig.json` rather than a config with
+project references. See the [diagram guide](diagrams.md) for scope, warnings, and deterministic output guarantees.
+
+An existing agent step may also run the extractor and include its generated graph in its report. The agent chooses
+the config and explains the results; the compiler determines the observed relationships. Preserve generated metadata
+and regenerate from source instead of asking an agent to repair individual edges. Proposed designs belong in a
+separate diagram marked `proposed`.
 
 ## Override configuration paths
 

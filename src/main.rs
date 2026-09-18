@@ -41,6 +41,35 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Debug(DebugArgs),
+    /// Generate architecture diagrams from source, without an agent.
+    Diagram(DiagramArgs),
+}
+#[derive(Args)]
+struct DiagramArgs {
+    #[command(subcommand)]
+    command: DiagramCommands,
+}
+#[derive(Subcommand)]
+enum DiagramCommands {
+    /// Extract TypeScript module dependencies using the project's compiler.
+    Typescript(TypeScriptArgs),
+}
+#[derive(Args)]
+struct TypeScriptArgs {
+    /// Path to the leaf tsconfig.json to analyze.
+    #[arg(long, default_value = "tsconfig.json")]
+    project: PathBuf,
+    /// Project root used for source links and portable node IDs.
+    #[arg(long, default_value = ".")]
+    root: PathBuf,
+    #[arg(long, default_value = "TypeScript module dependencies")]
+    title: String,
+    /// Write a new Markdown artifact; existing files are never overwritten. Defaults to stdout.
+    #[arg(long)]
+    output: Option<PathBuf>,
+    /// Node.js executable (Node 18 or newer).
+    #[arg(long, default_value = "node")]
+    node: std::ffi::OsString,
 }
 #[derive(Args)]
 struct DebugArgs {
@@ -72,6 +101,9 @@ async fn main() -> Result<()> {
     install_panic_hook();
     let cli = Cli::parse();
     match cli.command {
+        Some(Commands::Diagram(args)) => match args.command {
+            DiagramCommands::Typescript(args) => generate_typescript(args),
+        },
         Some(Commands::Debug(args)) => match args.command {
             DebugCommands::Run(request) => {
                 let agents = match cli.agents {
@@ -92,6 +124,33 @@ async fn main() -> Result<()> {
             .await
         }
     }
+}
+
+fn generate_typescript(args: TypeScriptArgs) -> Result<()> {
+    use miau::runs::{
+        application::generate_diagram::{ExtractionRequest, generate},
+        infrastructure::typescript::TypeScriptExtractor,
+    };
+    let artifact = generate(
+        &TypeScriptExtractor { node: args.node },
+        &ExtractionRequest {
+            project: &args.project,
+            root: &args.root,
+            title: &args.title,
+        },
+    )?;
+    match args.output {
+        Some(path) => {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .with_context(|| format!("cannot create new artifact {}", path.display()))?;
+            file.write_all(artifact.as_bytes())?;
+        }
+        None => io::stdout().lock().write_all(artifact.as_bytes())?,
+    }
+    Ok(())
 }
 
 async fn debug_run(

@@ -418,6 +418,21 @@ figcaption {
   font-size: 13px;
   margin-top: 5px;
 }
+.diagram-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: start;
+  margin-top: 32px;
+}
+.diagram-copy p {
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+.diagram-terminal pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .installation {
   display: grid;
   grid-template-columns: 0.85fr 1.15fr;
@@ -649,6 +664,7 @@ footer .footer-note {
   }
   .intro,
   .inspection,
+  .diagram-content,
   .installation {
     grid-template-columns: 1fr;
     gap: 32px;

@@ -8,13 +8,17 @@ fn inner_layers_do_not_depend_on_infrastructure() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let inner_layers = [
         source.join("runs/application.rs"),
+        source.join("runs/application/diagram.rs"),
+        source.join("runs/application/generate_diagram.rs"),
         source.join("runs/domain.rs"),
+        source.join("runs/domain/diagram.rs"),
         source.join("execution/application.rs"),
         source.join("execution/domain.rs"),
         source.join("workflow/application.rs"),
         source.join("workflow/application/decisions.rs"),
         source.join("workflow/domain.rs"),
         source.join("terminal/application.rs"),
+        source.join("terminal/application/diagram.rs"),
     ];
 
     let violations: Vec<PathBuf> = inner_layers
@@ -33,6 +37,7 @@ fn domain_layers_do_not_depend_on_application_layers() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let domains = [
         source.join("runs/domain.rs"),
+        source.join("runs/domain/diagram.rs"),
         source.join("execution/domain.rs"),
         source.join("workflow/domain.rs"),
     ];

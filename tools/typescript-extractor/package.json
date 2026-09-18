@@ -1,0 +1,11 @@
+{
+  "name": "miau-typescript-extractor-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test ../../tests/typescript-extractor.test.cjs",
+    "test:cli": "node --test ../../tests/typescript-cli.test.cjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

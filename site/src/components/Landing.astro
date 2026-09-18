@@ -48,6 +48,7 @@ const canonical = getAbsoluteLocaleUrl(locale);
         </a>
         <nav aria-label={t.navigation}>
           <a href="#how-it-works">{t.how}</a>
+          <a href="#diagrams">{t.diagrams}</a>
           <a href="#contribute">{t.contribute}</a>
           <a class="nav-github" href={repo}>GitHub <span aria-hidden="true">↗</span></a>
         </nav>
@@ -107,8 +108,28 @@ const canonical = getAbsoluteLocaleUrl(locale);
           <div class="inspection-copy"><p class="eyebrow">{t.inspectionLabel}</p><h2 id="inspection-title">{t.inspectionFirst}<br />{t.inspectionSecond}</h2><p>{t.inspectionBody}</p><ul class="feature-list"><li><span>01</span><div><h3>{t.filesTitle}</h3><p>{t.filesBody}</p></div></li><li><span>02</span><div><h3>{t.revisionsTitle}</h3><p>{t.revisionsBody}</p></div></li><li><span>03</span><div><h3>{t.pauseTitle}</h3><p>{t.pauseBody}</p></div></li></ul></div>
         </section>
 
+        <section id="diagrams" class="section diagrams" aria-labelledby="diagrams-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">{t.diagramsLabel}</p><h2 id="diagrams-title">{t.diagramsFirst}<br />{t.diagramsSecond}</h2></div>
+          </div>
+          <div class="diagram-content">
+            <div class="diagram-copy">
+              <p>{t.diagramsBody}</p>
+              <p>{t.diagramsDeterminism}</p>
+              <p>{t.diagramsReview}</p>
+              <a class="text-link" href={`${repo}/blob/main/docs/diagrams.md`}>{t.diagramsGuide} <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="install-terminal diagram-terminal">
+              <div class="terminal-bar"><span>{t.diagramsTerminal}</span><span aria-hidden="true">◇</span></div>
+              <pre aria-label={t.diagramsCommand}><code><span class="code-comment">{t.diagramsComment}</span>{'\n'}<span class="code-highlight">miau diagram typescript</span> --project tsconfig.json --root . --output architecture.md</code></pre>
+              <p>{t.diagramsRequirements}</p>
+            </div>
+          </div>
+          <p class="workflow-note">{t.diagramsScope}</p>
+        </section>
+
         <section id="get-started" class="section installation" aria-labelledby="install-title">
-          <div><p class="eyebrow">{t.installLabel}</p><h2 id="install-title">{t.installFirst}<br />{t.installSecond}</h2><p>{t.installBody}</p><a class="text-link" href={`${repo}#requirements`}>{t.setupGuide} <span aria-hidden="true">↗</span></a></div>
+          <div><p class="eyebrow">{t.installLabel}</p><h2 id="install-title">{t.installFirst}<br />{t.installSecond}</h2><p>{t.installBody}</p><a class="text-link" href={`${repo}#quick-start`}>{t.setupGuide} <span aria-hidden="true">↗</span></a></div>
           <div class="install-terminal"><div class="terminal-bar"><span>{t.quickStart}</span><span aria-hidden="true">─ &nbsp; □ &nbsp; ×</span></div><pre aria-label={t.commands}><code><span class="code-comment">{t.fetchComment}</span>{'\n'}git clone https://github.com/dramoscalvo/miau.git{'\n'}cd miau{'\n'}cargo install --path . --locked{'\n\n'}<span class="code-comment">{t.projectComment}</span>{'\n'}cd {t.projectPath}{'\n'}<span class="code-highlight">miau</span></code></pre><p>{t.press}<kbd>n</kbd>{t.createRun}<kbd>p</kbd>{t.setPrompt}<kbd>s</kbd>{t.startRun}</p></div>
         </section>
 

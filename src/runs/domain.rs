@@ -1,5 +1,7 @@
 //! Run aggregate and lifecycle value types.
 
+pub mod diagram;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, time::Duration};

@@ -87,6 +87,16 @@ class EnglishSiteTests(unittest.TestCase):
         self.assertEqual(alternates, {"en": origin + BASE, "es": origin + BASE + "es/",
                                       "x-default": origin + BASE})
 
+    def test_diagrams_are_discoverable_with_generation_and_setup_guides(self):
+        links = {attrs.get("href") for tag, attrs in self.page.elements if tag == "a"}
+        repo = "https://github.com/dramoscalvo/miau"
+        self.assertIn("#diagrams", links)
+        self.assertIn(repo + "/blob/main/docs/diagrams.md", links)
+        self.assertIn(repo + "#quick-start", links)
+        self.assertTrue(any(tag == "section" and attrs.get("id") == "diagrams"
+                            and attrs.get("aria-labelledby") == "diagrams-title"
+                            for tag, attrs in self.page.elements))
+
 
 class SpanishSiteTests(EnglishSiteTests):
     locale = "es"

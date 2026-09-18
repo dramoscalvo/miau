@@ -54,5 +54,20 @@ cargo clippy --offline --all-targets --all-features --locked -- -D warnings
 cargo build --offline --release --locked
 ```
 
+For TypeScript extractor changes, also install the locked compiler fixture and
+run the compiler and real CLI integration suites. Cargo's ordinary suite uses
+a fake Node runner and requires no JavaScript installation:
+
+```sh
+npm ci --prefix tools/typescript-extractor --ignore-scripts
+npm test --prefix tools/typescript-extractor
+cargo build --offline --locked
+npm run test:cli --prefix tools/typescript-extractor
+```
+
+The JavaScript suites use temporary projects, never agent CLIs. They cover
+compiler module resolution, evidence, unsupported syntax, repeatability across
+checkout paths, provenance changes, and installed-command output preservation.
+
 When a test needs a temporary directory, use a unique path and clean it up at
 the end of that test. Never clean a real `miaus/` directory as part of tests.
