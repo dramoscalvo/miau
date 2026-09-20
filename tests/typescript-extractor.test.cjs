@@ -132,3 +132,192 @@ test('import and require resolution modes select the correct local package-impor
     ['file:src/main.mts', 'file:src/esm.ts'],
   ]);
 });
+
+test('type scope discovers supported declarations with canonical hierarchy and kinds', t => {
+  const input = project(t, {
+    'src/main.ts': [
+      'export class A {}',
+      'export abstract class B {}',
+      'export interface C {}',
+      'export enum D { One }',
+      'export type Alias = string;',
+    ].join('\n'),
+  });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert.equal(graph.version, 2);
+  assert.equal(graph.provenance.scope, 'type-relations');
+  assert.deepEqual(
+    graph.nodes.filter(node => node.id.startsWith('type:src/main.ts#')).map(node => [node.id, node.kind, node.parent, node.source.line]),
+    [
+      ['type:src/main.ts#A', 'class', 'file:src/main.ts', 1],
+      ['type:src/main.ts#B', 'abstract-class', 'file:src/main.ts', 2],
+      ['type:src/main.ts#C', 'interface', 'file:src/main.ts', 3],
+      ['type:src/main.ts#D', 'enum', 'file:src/main.ts', 4],
+    ],
+  );
+  assert.equal(graph.nodes.find(node => node.id === 'file:src/main.ts').kind, 'module');
+  assert(!graph.nodes.some(node => node.label === 'Alias'));
+});
+
+test('type scope resolves aliased heritage symbols and duplicate names canonically', t => {
+  const input = project(t, {
+    'src/a/User.ts': 'export class User {}\nexport interface Port {}\n',
+    'src/b/User.ts': 'export class User {}\nexport interface Other {}\n',
+    'src/main.ts': [
+      'import { User as Customer, Port as Contract } from "./a/User";',
+      'import { User as OtherUser, Other } from "./b/User";',
+      'export class Service extends Customer implements Contract, Other {',
+      '  peer: OtherUser;',
+      '}',
+    ].join('\n'),
+  });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert.deepEqual(graph.edges.map(edge => [edge.from, edge.to, edge.kind]), [
+    ['type:src/main.ts#Service', 'type:src/a/User.ts#Port', 'implements'],
+    ['type:src/main.ts#Service', 'type:src/a/User.ts#User', 'inheritance'],
+    ['type:src/main.ts#Service', 'type:src/b/User.ts#Other', 'implements'],
+    ['type:src/main.ts#Service', 'type:src/b/User.ts#User', 'association'],
+  ]);
+  assert(!graph.nodes.some(node => node.label === 'Customer'));
+});
+
+test('qualified namespace references resolve to the underlying declaration', t => {
+  const input = project(t, {
+    'src/model.ts': 'export interface Model {}\n',
+    'src/main.ts': 'import * as domain from "./model";\nclass Service { model: domain.Model; }\n',
+  });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert(graph.edges.some(edge => edge.from === 'type:src/main.ts#Service'
+    && edge.to === 'type:src/model.ts#Model' && edge.kind === 'association'));
+});
+
+test('type scope extracts class and interface inheritance with independently sourced edges', t => {
+  const input = project(t, {
+    'src/main.ts': [
+      'class A {}',
+      'class B extends A {}',
+      'interface X {}',
+      'interface Y extends X {}',
+      'interface Z extends X, Y {}',
+    ].join('\n'),
+  });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert.deepEqual(
+    graph.edges.filter(edge => edge.kind === 'inheritance').map(edge => [edge.from, edge.to, edge.source.line]),
+    [
+      ['type:src/main.ts#B', 'type:src/main.ts#A', 2],
+      ['type:src/main.ts#Y', 'type:src/main.ts#X', 4],
+      ['type:src/main.ts#Z', 'type:src/main.ts#X', 5],
+      ['type:src/main.ts#Z', 'type:src/main.ts#Y', 5],
+    ],
+  );
+});
+
+test('type scope maps declared properties and operations without collapsing relation kinds', t => {
+  const input = project(t, {
+    'src/main.ts': [
+      'interface B {}',
+      'interface C {}',
+      'class A {',
+      '  first: B;',
+      '  second?: B;',
+      '  nullable: B | null;',
+      '  values: B[];',
+      '  constructor(private owned: B, readonly visible: B, input: B) {}',
+      '  run(input: B): C { throw new Error(); }',
+      '}',
+    ].join('\n'),
+  });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert.deepEqual(graph.edges.map(edge => [edge.from, edge.to, edge.kind]), [
+    ['type:src/main.ts#A', 'type:src/main.ts#B', 'association'],
+    ['type:src/main.ts#A', 'type:src/main.ts#B', 'dependency'],
+    ['type:src/main.ts#A', 'type:src/main.ts#C', 'dependency'],
+  ]);
+});
+
+test('type normalization is conservative for generics, wrappers, builtins and runtime expressions', t => {
+  const input = project(t, {
+    'src/main.ts': [
+      'declare function decorator(value?: unknown): ClassDecorator;',
+      'class Order {}',
+      'class Result {}',
+      'class Engine {}',
+      'class Repository<T> {}',
+      '@decorator(Order)',
+      'class Decorated {}',
+      'class Service<T> {',
+      '  repo: Repository<Order>;',
+      '  engines: ReadonlyArray<Engine>;',
+      '  private readonly inferred = new Engine();',
+      '  save(value: T): Promise<Result> {',
+      '    const local: Order = new Order();',
+      '    local.toString();',
+      '    throw new Error();',
+      '  }',
+      '}',
+    ].join('\n'),
+  });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert.deepEqual(graph.edges.map(edge => [edge.from, edge.to, edge.kind]), [
+    ['type:src/main.ts#Service', 'type:src/main.ts#Engine', 'association'],
+    ['type:src/main.ts#Service', 'type:src/main.ts#Repository', 'association'],
+    ['type:src/main.ts#Service', 'type:src/main.ts#Result', 'dependency'],
+  ]);
+  assert(!graph.edges.some(edge => ['aggregation', 'composition'].includes(edge.kind)));
+  assert(!graph.edges.some(edge => edge.from === 'type:src/main.ts#Decorated'));
+  assert(!graph.nodes.some(node => ['Promise', 'T'].includes(node.label)));
+});
+
+test('interface operations create dependencies and property ownership syntax remains association', t => {
+  const input = project(t, {
+    'src/main.ts': [
+      'abstract class Entity {}',
+      'class Engine {}',
+      'interface Repository { save(entity: Entity): Promise<void>; }',
+      'class Car { private readonly engine: Engine = new Engine(); }',
+      'class Service { run(entity: Entity): Repository { throw new Error(); } }',
+    ].join('\n'),
+  });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert.deepEqual(graph.edges.map(edge => [edge.from, edge.to, edge.kind]), [
+    ['type:src/main.ts#Car', 'type:src/main.ts#Engine', 'association'],
+    ['type:src/main.ts#Repository', 'type:src/main.ts#Entity', 'dependency'],
+    ['type:src/main.ts#Service', 'type:src/main.ts#Entity', 'dependency'],
+    ['type:src/main.ts#Service', 'type:src/main.ts#Repository', 'dependency'],
+  ]);
+  assert(!graph.edges.some(edge => ['aggregation', 'composition'].includes(edge.kind)));
+});
+
+test('declared self relationships are retained', t => {
+  const input = project(t, { 'src/main.ts': 'class LinkNode { next?: LinkNode; compare(other: LinkNode): LinkNode { return other; } }\n' });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  assert.deepEqual(graph.edges.map(edge => [edge.from, edge.to, edge.kind]), [
+    ['type:src/main.ts#LinkNode', 'type:src/main.ts#LinkNode', 'association'],
+    ['type:src/main.ts#LinkNode', 'type:src/main.ts#LinkNode', 'dependency'],
+  ]);
+});
+
+test('type scope is deterministic across runs and relocated checkouts', t => {
+  const first = project(t, { 'src/main.ts': 'interface B {}\nclass A { value: B | undefined; }\n' });
+  const second = project(t, { 'src/main.ts': 'interface B {}\nclass A { value: B | undefined; }\n' });
+  const options = input => ({ ...input, scope: 'types', title: 'Types' });
+  assert.equal(JSON.stringify(extract(ts, options(first))), JSON.stringify(extract(ts, options(first))));
+  assert.equal(JSON.stringify(extract(ts, options(first))), JSON.stringify(extract(ts, options(second))));
+  const fingerprint = extract(ts, options(first)).provenance.fingerprint;
+  fs.appendFileSync(path.join(first.root, 'src/main.ts'), '// changed\n');
+  assert.notEqual(extract(ts, options(first)).provenance.fingerprint, fingerprint);
+});
+
+test('recoverable semantic errors warn while syntax errors remain fatal', t => {
+  const recoverable = project(t, { 'src/main.ts': 'class A { value: Missing; }\n' });
+  const graph = extract(ts, { ...recoverable, scope: 'types' });
+  assert(graph.provenance.warnings.some(warning => warning.includes('unresolved type')));
+  const broken = project(t, { 'src/main.ts': 'class A { value: ; }\n' });
+  assert.throws(() => extract(ts, { ...broken, scope: 'types' }), /syntax/i);
+});
+
+test('ambiguous declaration merging fails instead of guessing a semantic identity', t => {
+  const input = project(t, { 'src/main.ts': 'interface A { one: string; }\ninterface A { two: string; }\n' });
+  assert.throws(() => extract(ts, { ...input, scope: 'types' }), /declaration merging/i);
+});

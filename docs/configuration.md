@@ -103,6 +103,9 @@ command = ["miau", "diagram", "typescript", "--project", "tsconfig.json", "--roo
 writes = "architecture.md"
 ```
 
+This defaults to `--scope modules`. Add `"--scope", "types"` to the command array for compiler-derived classes,
+interfaces, enums, inheritance, implementations, associations, and operation dependencies.
+
 The command runs in the project's directory. Install `miau` and Node.js 18+ on `PATH`, and install the project's locked
 dependencies, including TypeScript 5.6–6.x. Omit `--output`: miau captures stdout as the node's versioned artifact.
 Command nodes need no `agent` or `role`; this one uses no model or API key and leaves the default workflow unchanged

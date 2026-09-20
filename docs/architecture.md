@@ -77,8 +77,11 @@ Parsing does not establish their factual correctness or authenticate metadata. S
 The `runs/application/generate_diagram` use case accepts a `DiagramExtractor`
 port and validates its observed graph before returning a Markdown artifact.
 The TypeScript infrastructure adapter starts one Node process with an embedded
-script and the target project's compiler package. Compiler resolution and AST
-walking produce source-backed edges; source text is never sent to a model.
+script and the target project's compiler package. Module scope uses compiler
+resolution and AST walking. Type scope builds a `Program` and `TypeChecker`,
+indexes supported project declarations by symbol, and resolves source-backed
+semantic relationships through those symbols. Source text is never sent to a
+model.
 The standalone CLI writes stdout or a new output file and never changes run
 state. A configured command workflow node can persist that stdout through the
 normal versioned-artifact lifecycle. Optional provenance records deterministic

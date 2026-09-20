@@ -74,7 +74,7 @@ fn diagram_ignores_review_and_nested_examples() {
 #[test]
 fn diagram_rejects_ambiguous_or_broken_graphs() {
     for artifact in [
-        ARTIFACT.replace("\"version\": 1", "\"version\": 2"),
+        ARTIFACT.replace("\"version\": 1", "\"version\": 3"),
         ARTIFACT.replace("\"id\": \"files\"", "\"id\": \"port\""),
         ARTIFACT.replace("\"to\": \"port\"", "\"to\": \"missing\""),
         ARTIFACT.replace("\"parent\": \"runs\"", "\"parent\": \"missing\""),
@@ -92,6 +92,19 @@ fn diagram_rejects_ambiguous_or_broken_graphs() {
     ] {
         assert!(parse(&artifact).is_err(), "accepted {artifact}");
     }
+}
+
+#[test]
+fn version_two_accepts_semantic_node_kinds_and_rejects_unknown_kinds() {
+    let version_two = ARTIFACT
+        .replace("\"version\": 1", "\"version\": 2")
+        .replace(
+            "\"label\": \"ArtifactRepository\"",
+            "\"label\": \"ArtifactRepository\", \"kind\": \"interface\"",
+        );
+    let graph = parse(&version_two).unwrap().unwrap();
+    assert_eq!(graph.nodes[1].kind.unwrap().label(), "Interface");
+    assert!(parse(&version_two.replace("\"interface\"", "\"service\"")).is_err());
 }
 
 #[test]
@@ -125,7 +138,7 @@ fn diagram_error_remains_inspectable_and_valid_reload_recovers() {
     let mut model = Model::default();
     model
         .diagram
-        .load(&ARTIFACT.replace("\"version\": 1", "\"version\": 2"));
+        .load(&ARTIFACT.replace("\"version\": 1", "\"version\": 3"));
     assert!(model.diagram.error.is_some());
     for _ in 0..3 {
         model.update(Message::ToggleDetailView { has_review: true });

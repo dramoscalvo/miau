@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use miau::{
     execution::{
         application::Request,
@@ -51,7 +51,7 @@ struct DiagramArgs {
 }
 #[derive(Subcommand)]
 enum DiagramCommands {
-    /// Extract TypeScript module dependencies using the project's compiler.
+    /// Extract TypeScript module or semantic type relationships using the project's compiler.
     Typescript(TypeScriptArgs),
 }
 #[derive(Args)]
@@ -62,14 +62,23 @@ struct TypeScriptArgs {
     /// Project root used for source links and portable node IDs.
     #[arg(long, default_value = ".")]
     root: PathBuf,
-    #[arg(long, default_value = "TypeScript module dependencies")]
-    title: String,
+    /// Compiler-derived graph scope.
+    #[arg(long, value_enum, default_value_t = TypeScriptScope::Modules)]
+    scope: TypeScriptScope,
+    #[arg(long)]
+    title: Option<String>,
     /// Write a new Markdown artifact; existing files are never overwritten. Defaults to stdout.
     #[arg(long)]
     output: Option<PathBuf>,
     /// Node.js executable (Node 18 or newer).
     #[arg(long, default_value = "node")]
     node: std::ffi::OsString,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum TypeScriptScope {
+    Modules,
+    Types,
 }
 #[derive(Args)]
 struct DebugArgs {
@@ -128,15 +137,24 @@ async fn main() -> Result<()> {
 
 fn generate_typescript(args: TypeScriptArgs) -> Result<()> {
     use miau::runs::{
-        application::generate_diagram::{ExtractionRequest, generate},
+        application::generate_diagram::{ExtractionRequest, ExtractionScope, generate},
         infrastructure::typescript::TypeScriptExtractor,
     };
+    let scope = match args.scope {
+        TypeScriptScope::Modules => ExtractionScope::Modules,
+        TypeScriptScope::Types => ExtractionScope::Types,
+    };
+    let title = args.title.unwrap_or_else(|| match scope {
+        ExtractionScope::Modules => "TypeScript module dependencies".into(),
+        ExtractionScope::Types => "TypeScript type relationships".into(),
+    });
     let artifact = generate(
         &TypeScriptExtractor { node: args.node },
         &ExtractionRequest {
             project: &args.project,
             root: &args.root,
-            title: &args.title,
+            title: &title,
+            scope,
         },
     )?;
     match args.output {

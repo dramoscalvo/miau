@@ -82,6 +82,10 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
         return;
     };
     let mut text = format!("{} [{}]\n", node.label, node.id);
+    if let Some(kind) = node.kind {
+        text.push_str(kind.label());
+        text.push('\n');
+    }
     if let Some(metadata) = &graph.provenance {
         text.push_str(&format!(
             "Extractor: {} v{} · TypeScript {}\nScope: {}\n",

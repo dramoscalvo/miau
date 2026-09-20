@@ -79,7 +79,7 @@ fn validate(graph: &Graph) -> Result<(), String> {
     {
         return Err("Invalid diagram provenance".into());
     }
-    if graph.version != 1 {
+    if !matches!(graph.version, 1 | 2) {
         return Err(format!("Unsupported diagram version: {}", graph.version));
     }
     if graph.title.trim().is_empty() || graph.nodes.is_empty() {

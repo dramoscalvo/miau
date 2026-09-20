@@ -50,15 +50,20 @@ Never present proposed structure as observed or invent evidence. The diagram is
 agent-reported context, not independently verified analysis or approval. Limit
 it to the relevant subgraph (at most 1000 nodes, 5000 edges, and 1 MiB of JSON).
 
-For observed TypeScript module dependencies, prefer the deterministic generator:
-`miau diagram typescript --project tsconfig.json --root .`. Select the project's
+For observed TypeScript module or semantic type relationships, use the deterministic generator:
+`miau diagram typescript --project tsconfig.json --root . --scope modules` or
+`--scope types`. Module scope is the default. Select the project's
 actual leaf tsconfig and use the run's project directory as root. It needs Node
 and the project's installed TypeScript compiler. Preserve the generated
 `miau-graph` block, including optional `provenance` metadata, in your Handoff;
 summarize relevant results and warnings in Review. Do not manually invent or
-repair extracted relationships. Report generation failures and missing tools
-instead of claiming an agent-authored graph was extracted. This generator
-covers module dependencies, not class relationships or runtime behavior.
+repair extracted relationships, invent semantic nodes, convert associations to
+composition, classify directories as architecture layers, or repair unresolved
+compiler relationships manually. You may select the scope, invoke extraction,
+describe observed relationships, and interpret warnings. Report generation
+failures and missing tools instead of claiming an agent-authored graph was
+extracted. Put interpreted or redesigned architecture in a separate
+`status: "proposed"` graph.
 
 For every role and agent, put questions requiring human input in Review as
 second-level headings: `## D1: Question?`, `## D2: Question?`, and so on. Each

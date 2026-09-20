@@ -42,17 +42,20 @@ and revisiting steps.
 
 ## Architecture diagrams
 
-Extract a TypeScript project's module dependencies into a review artifact:
+Extract a TypeScript project's module dependencies (the default) or semantic type relationships into a review
+artifact:
 
 ```sh
 miau diagram typescript --project tsconfig.json --root . --output architecture.md
+miau diagram typescript --project tsconfig.json --root . --scope types --output types.md
 ```
 
 Generation needs Node.js 18+ and TypeScript 5.6–6.x installed in the target project. It uses the compiler's parser and
 module resolution, with no agent, model, or API key. Unchanged inputs and compiler/runtime environment produce the
-same sorted output; source references, extraction warnings, and an input fingerprint accompany the graph.
-The command creates a new file and refuses to overwrite one. This milestone extracts module dependencies, not classes
-or runtime behavior.
+same sorted output; source references, extraction warnings, and an input fingerprint accompany the graph. Type scope
+extracts classes, abstract classes, interfaces, enums, inheritance, implements, declared property associations, and
+declared operation dependencies. It does not infer runtime calls, ownership, aggregation, composition, framework
+injection, or architecture layers. The command creates a new file and refuses to overwrite one.
 
 Add it as an optional [workflow command step](docs/configuration.md#add-a-typescript-diagram-step) to review the result
 in miau. Press `v` to reach Diagram, browse the file hierarchy and relationships, and open cited sources in your editor.

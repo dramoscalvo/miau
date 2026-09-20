@@ -35,3 +35,26 @@ test('installed Rust command runs the real compiler and emits a reproducible Mar
   assert(!fs.existsSync(path.join(root, 'failed.md')));
   assert(!fs.existsSync(path.join(root, 'miaus')));
 });
+
+test('module scope is the default and type scope selects semantic extraction', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'miau-ts-cli-scope-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'node_modules'));
+  fs.symlinkSync(path.resolve(__dirname, '../tools/typescript-extractor/node_modules/typescript'),
+    path.join(root, 'node_modules/typescript'), process.platform === 'win32' ? 'junction' : 'dir');
+  fs.writeFileSync(path.join(root, 'tsconfig.json'), '{"compilerOptions":{"module":"ESNext","moduleResolution":"Bundler"},"files":["a.ts"]}');
+  fs.writeFileSync(path.join(root, 'a.ts'), 'export interface Port {}\nexport class Adapter implements Port {}\n');
+  const binary = process.env.MIAU_TEST_BIN || path.resolve(__dirname, '../target/debug/miau');
+  const run = (...args) => spawnSync(binary, ['diagram', 'typescript', '--root', '.', '--project', 'tsconfig.json', ...args], { cwd: root, encoding: 'utf8' });
+  const implicit = run();
+  const modules = run('--scope', 'modules');
+  assert.equal(implicit.status, 0, implicit.stderr);
+  assert.equal(modules.status, 0, modules.stderr);
+  assert.equal(implicit.stdout, modules.stdout);
+  const types = run('--scope', 'types');
+  assert.equal(types.status, 0, types.stderr);
+  const graph = JSON.parse(types.stdout.split('```miau-graph\n')[1].split('\n```')[0]);
+  assert.equal(graph.version, 2);
+  assert.equal(graph.provenance.scope, 'type-relations');
+  assert(graph.edges.some(edge => edge.kind === 'implements'));
+});

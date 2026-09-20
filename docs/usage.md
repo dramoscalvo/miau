@@ -109,7 +109,8 @@ truncation or approval rule. Ordinary diagrams and Gherkin remain text, and scen
 An optional `miau-graph` block in Handoff adds the navigable [Diagram view](diagrams.md) after Git changes.
 
 For TypeScript projects, add a [diagram command step](configuration.md#add-a-typescript-diagram-step) to generate a
-compiler-resolved module dependency snapshot without an agent. In Diagram, use `j`/`k` to select a node, Enter or
+compiler-resolved module dependency or semantic type snapshot without an agent. In Diagram, use `j`/`k` to select a
+node, Enter or
 Backspace to navigate its hierarchy, `]` to cycle source references, and `o` to open the selected file in `$EDITOR`
 once the process has stopped. The header shows the cited line; the editor opens at its default position. `R` reloads
 the stored artifact, not the project source. Regenerate the artifact after source changes; browsing, opening files,

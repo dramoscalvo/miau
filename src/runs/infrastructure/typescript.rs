@@ -24,6 +24,7 @@ impl DiagramExtractor for TypeScriptExtractor {
             .arg(&project)
             .arg(&root)
             .arg(request.title)
+            .arg(request.scope.argument())
             .env("MIAU_TYPESCRIPT_EXTRACT", "1")
             .current_dir(&root)
             .stdin(Stdio::null())

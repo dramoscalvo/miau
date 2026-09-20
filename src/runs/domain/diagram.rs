@@ -26,8 +26,36 @@ pub enum Status {
 pub struct Node {
     pub id: String,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<NodeKind>,
     pub parent: Option<String>,
     pub source: Option<Source>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NodeKind {
+    Directory,
+    Module,
+    Class,
+    AbstractClass,
+    Interface,
+    Enum,
+    External,
+}
+
+impl NodeKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Directory => "Directory",
+            Self::Module => "Module",
+            Self::Class => "Class",
+            Self::AbstractClass => "Abstract class",
+            Self::Interface => "Interface",
+            Self::Enum => "Enum",
+            Self::External => "External",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

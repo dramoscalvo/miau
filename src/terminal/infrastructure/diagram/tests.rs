@@ -29,6 +29,32 @@ fn diagram_shows_extractor_provenance_and_coverage_warnings() {
 }
 
 #[test]
+fn diagram_shows_semantic_node_kind() {
+    let document = DOCUMENT
+        .replace("\"version\": 1", "\"version\": 2")
+        .replace(
+            "\"label\": \"ArtifactRepository\"",
+            "\"label\": \"ArtifactRepository\", \"kind\": \"interface\"",
+        );
+    let mut model = Model::default();
+    model.diagram.load(&document);
+    model.update(Message::DiagramChild);
+    let mut terminal = Terminal::new(TestBackend::new(120, 25)).unwrap();
+    terminal
+        .draw(|frame| super::render(frame, frame.area(), &model, "architecture"))
+        .unwrap();
+    let text: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(text.contains("ArtifactRepository [port]"));
+    assert!(text.contains("Interface"));
+}
+
+#[test]
 fn diagram_renders_selected_relationships_and_unicode_at_multiple_sizes() {
     let mut model = Model::default();
     model
