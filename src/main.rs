@@ -17,6 +17,7 @@ use std::{
     fs,
     io::{self, Write},
     path::PathBuf,
+    process::Command,
     sync::Mutex,
 };
 
@@ -65,6 +66,9 @@ struct TypeScriptArgs {
     /// Compiler-derived graph scope.
     #[arg(long, value_enum, default_value_t = TypeScriptScope::Modules)]
     scope: TypeScriptScope,
+    /// Include only new or edited TypeScript files and their directly related types.
+    #[arg(long)]
+    changed: bool,
     #[arg(long)]
     title: Option<String>,
     /// Write a new Markdown artifact; existing files are never overwritten. Defaults to stdout.
@@ -144,9 +148,29 @@ fn generate_typescript(args: TypeScriptArgs) -> Result<()> {
         TypeScriptScope::Modules => ExtractionScope::Modules,
         TypeScriptScope::Types => ExtractionScope::Types,
     };
-    let title = args.title.unwrap_or_else(|| match scope {
-        ExtractionScope::Modules => "TypeScript module dependencies".into(),
-        ExtractionScope::Types => "TypeScript type relationships".into(),
+    if args.changed && scope != ExtractionScope::Types {
+        return Err(anyhow!("--changed is supported only with --scope types"));
+    }
+    let changed_files = if args.changed {
+        let Some(files) = changed_typescript_files(&args.root)? else {
+            return write_diagram_artifact(
+                "# Review\nThe project is not a Git worktree. Changed-file extraction is not applicable.\n\n\
+                 # Handoff\nNo diagram was generated because the changed files could not be determined.\n",
+                args.output,
+            );
+        };
+        if files.is_empty() {
+            let artifact = "# Review\nNo new or edited TypeScript files were found. No impacted UML graph applies.\n\n# Handoff\nThe deterministic extractor found no changed TypeScript files to diagram.\n";
+            return write_diagram_artifact(artifact, args.output);
+        }
+        Some(files)
+    } else {
+        None
+    };
+    let title = args.title.unwrap_or_else(|| match (scope, args.changed) {
+        (ExtractionScope::Modules, _) => "TypeScript module dependencies".into(),
+        (ExtractionScope::Types, true) => "Impacted TypeScript type relationships".into(),
+        (ExtractionScope::Types, false) => "TypeScript type relationships".into(),
     });
     let artifact = generate(
         &TypeScriptExtractor { node: args.node },
@@ -155,9 +179,14 @@ fn generate_typescript(args: TypeScriptArgs) -> Result<()> {
             root: &args.root,
             title: &title,
             scope,
+            changed_files: changed_files.as_deref(),
         },
     )?;
-    match args.output {
+    write_diagram_artifact(&artifact, args.output)
+}
+
+fn write_diagram_artifact(artifact: &str, output: Option<PathBuf>) -> Result<()> {
+    match output {
         Some(path) => {
             let mut file = fs::OpenOptions::new()
                 .write(true)
@@ -169,6 +198,74 @@ fn generate_typescript(args: TypeScriptArgs) -> Result<()> {
         None => io::stdout().lock().write_all(artifact.as_bytes())?,
     }
     Ok(())
+}
+
+fn changed_typescript_files(root: &std::path::Path) -> Result<Option<Vec<String>>> {
+    let root = root.canonicalize()?;
+    let repository = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .env("LC_ALL", "C")
+        .current_dir(&root)
+        .output()
+        .context("cannot inspect changed files; --changed requires Git")?;
+    if !repository.status.success() {
+        let error = String::from_utf8_lossy(&repository.stderr);
+        if error.starts_with("fatal: not a git repository") {
+            return Ok(None);
+        }
+        return Err(anyhow!("cannot locate Git worktree: {}", error.trim()));
+    }
+    let repository_text = std::str::from_utf8(&repository.stdout)?;
+    let repository_root = std::path::Path::new(
+        repository_text
+            .strip_suffix('\n')
+            .unwrap_or(repository_text),
+    )
+    .canonicalize()?;
+    let output = Command::new("git")
+        .args(["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+        .arg("--")
+        .arg(&root)
+        .current_dir(&repository_root)
+        .output()
+        .context("cannot inspect changed files; --changed requires Git")?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "cannot inspect changed files: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let mut files = std::collections::BTreeSet::new();
+    let mut records = output.stdout.split(|byte| *byte == 0);
+    while let Some(record) = records.next() {
+        if record.len() < 4 || record[2] != b' ' {
+            continue;
+        }
+        let status = &record[..2];
+        // Porcelain -z emits the destination first, then the original path without a status prefix.
+        if status.contains(&b'R') || status.contains(&b'C') {
+            records.next();
+        }
+        if status.contains(&b'D') || status == b"!!" {
+            continue;
+        }
+        let repository_path = repository_root.join(std::str::from_utf8(&record[3..])?);
+        let Ok(project_path) = repository_path.strip_prefix(&root) else {
+            continue;
+        };
+        let file = project_path
+            .to_str()
+            .context("changed source path is not UTF-8")?;
+        if matches!(
+            std::path::Path::new(file)
+                .extension()
+                .and_then(|ext| ext.to_str()),
+            Some("ts" | "tsx" | "mts" | "cts")
+        ) {
+            files.insert(file.replace(std::path::MAIN_SEPARATOR, "/"));
+        }
+    }
+    Ok(Some(files.into_iter().collect()))
 }
 
 async fn debug_run(

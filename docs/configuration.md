@@ -93,23 +93,38 @@ it, such as `plan_v2.md` and `plan_v3.md`. The run state and later workflow node
 
 ## Add a TypeScript diagram step
 
-Insert this optional command node where a source snapshot helps your review, for example after implementation and
-before the final agent review:
+Insert this command node after implementation and before the final agent review to generate a deterministic graph of
+the changed TypeScript files and their directly related types:
 
 ```toml
 [[nodes]]
-name = "architecture"
-command = ["miau", "diagram", "typescript", "--project", "tsconfig.json", "--root", "."]
-writes = "architecture.md"
+name = "impacted-diagram"
+command = ["miau", "diagram", "typescript", "--scope", "types", "--changed", "--project", "tsconfig.json", "--root", "."]
+writes = "impacted-diagram.md"
 ```
 
-This defaults to `--scope modules`. Add `"--scope", "types"` to the command array for compiler-derived classes,
-interfaces, enums, inheritance, implementations, associations, and operation dependencies.
+`--changed` reads Git's working-tree status, including staged, unstaged, and untracked files. The graph contains those
+TypeScript files, their supported top-level types, and types with a direct relationship to a changed type. It does not
+include second-degree relationships. Deleted files are omitted. Git must be available, and the command analyzes the
+full selected TypeScript project to resolve relationships before narrowing the graph. The fingerprint covers the
+compiler inputs and selected changed files. If no TypeScript files changed, the step writes a short “no diagram
+applies” artifact and completes normally. Existing unrelated edits are included because miau does not attribute Git
+changes to a specific workflow step.
+
+Changed paths are restricted to `--root` and normalized relative to it, including when the project is inside a larger
+Git repository. Renames use their destination paths. Node and relationship limits apply to the filtered graph, so
+unrelated types do not exhaust its display limits. If the project is not a Git worktree, the step emits an explanatory
+artifact without a graph and returns to human review. This means the changed files could not be determined; it does
+not assert that there were no changes. Missing Git and other Git errors remain failures.
+
+Remove `--changed` to generate the full project graph. The default scope is `modules`; `--scope types` selects
+compiler-derived classes, interfaces, enums, inheritance, implementations, associations, and operation dependencies.
 
 The command runs in the project's directory. Install `miau` and Node.js 18+ on `PATH`, and install the project's locked
 dependencies, including TypeScript 5.6–6.x. Omit `--output`: miau captures stdout as the node's versioned artifact.
-Command nodes need no `agent` or `role`; this one uses no model or API key and leaves the default workflow unchanged
-until you configure it. Workflow changes apply to newly created runs.
+Command nodes need no `agent` or `role`; this one uses no model or API key. Workflow changes apply to newly created
+runs. The checked-in default workflow places this step after implementation; add the same node to existing user
+workflow files because miau preserves those files instead of overwriting them.
 
 Start the step with `s`, inspect its report and Diagram view with `v`, then approve with `a` when ready to continue.
 Completion of extraction does not approve the result. Keep `--root` as the run's project directory so source links

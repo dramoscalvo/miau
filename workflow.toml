@@ -19,6 +19,11 @@ role = "implementer"
 writes = "implementation.md"
 
 [[nodes]]
+name = "impacted-diagram"
+command = ["miau", "diagram", "typescript", "--scope", "types", "--changed", "--project", "tsconfig.json", "--root", "."]
+writes = "impacted-diagram.md"
+
+[[nodes]]
 name = "review"
 agent = "claude"
 role = "reviewer"

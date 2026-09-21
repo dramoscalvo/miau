@@ -52,6 +52,19 @@ It requires `miau` on PATH. Keep `--root` equal to the run's project directory s
 For a monorepo, select a leaf config with `--project packages/app/tsconfig.json` and keep the workspace as `--root`.
 Project references are rejected; extracting multiple referenced projects into one graph is not supported yet.
 
+For a type graph limited to new and edited TypeScript files plus their directly related types, add `--scope types
+--changed`. The changed set comes from Git status and includes staged, unstaged, and untracked files; deleted files are
+omitted. The graph retains all supported types declared in changed files and the other endpoints of relationships
+touching those types. It does not recursively expand another relationship hop. Git changes within `--root` include
+pre-existing unrelated edits. Repository-relative paths are normalized to the project root, and renames use their
+destination paths. The compiler still analyzes the selected project to resolve symbols, while
+the displayed graph is narrowed to the changed files and directly related types. When no TypeScript source changed,
+the command emits a short no-diagram artifact rather than failing.
+
+The node and edge limits apply after filtering. A large unrelated graph does not prevent a small changed graph from
+being generated. Outside a Git worktree, the command emits an explanatory artifact that changed-file extraction is
+not applicable; it does not claim the project is unchanged. Missing Git and other Git errors still fail the command.
+
 ### Module scope
 
 Module scope records module imports, exports, and resolved dependencies. The compiler reads tsconfig file selection,
@@ -213,7 +226,7 @@ edge requires a source reference. Without generator metadata, Observed is labell
 independently verify a cited line, and references may become stale as source files change.
 
 The module generator remains on graph version 1 for byte-compatible output. Type scope emits graph version 2 and
-provenance rule version 2.
+provenance rule version 3.
 
 An observed graph may also contain `provenance` with `extractor`, positive integer `version`, `typescript`, `project`,
 `scope`, a 64-digit hexadecimal SHA-256 `fingerprint`, and a `warnings` string array. `project` is a relative config

@@ -9,6 +9,7 @@ pub struct ExtractionRequest<'a> {
     pub root: &'a Path,
     pub title: &'a str,
     pub scope: ExtractionScope,
+    pub changed_files: Option<&'a [String]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

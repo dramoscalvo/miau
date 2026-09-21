@@ -194,4 +194,43 @@ mod tests {
             [("critique", "delivery"), ("implement", "delivery")]
         );
     }
+
+    #[test]
+    fn embedded_workflow_runs_impacted_diagram_after_implementation() {
+        let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
+        let names: Vec<_> = workflow
+            .nodes
+            .iter()
+            .map(|node| node.name.as_str())
+            .collect();
+        let implementation = names.iter().position(|name| *name == "implement").unwrap();
+        let diagram = names
+            .iter()
+            .position(|name| *name == "impacted-diagram")
+            .unwrap();
+        let review = names.iter().position(|name| *name == "review").unwrap();
+
+        assert!(implementation < diagram && diagram < review);
+        assert_eq!(
+            workflow.nodes[diagram]
+                .command
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            [
+                "miau",
+                "diagram",
+                "typescript",
+                "--scope",
+                "types",
+                "--changed",
+                "--project",
+                "tsconfig.json",
+                "--root",
+                ".",
+            ]
+        );
+    }
 }

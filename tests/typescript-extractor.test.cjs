@@ -309,6 +309,35 @@ test('type scope is deterministic across runs and relocated checkouts', t => {
   assert.notEqual(extract(ts, options(first)).provenance.fingerprint, fingerprint);
 });
 
+test('impacted type scope includes changed files and directly related types only', t => {
+  const input = project(t, {
+    'src/changed.ts': [
+      'import { Helper } from "./helper";',
+      'import { Port } from "./port";',
+      'export class Adapter implements Port {',
+      '  value: Helper;',
+      '}',
+    ].join('\n'),
+    'src/port.ts': 'import { Adapter } from "./changed";\nexport interface Port { adapter: Adapter; }\n',
+    'src/helper.ts': 'export class Helper {}\n',
+    'src/unrelated.ts': 'export class Unrelated {}\n',
+  });
+  const graph = extract(ts, {
+    ...input,
+    scope: 'types',
+    changedFiles: ['src/changed.ts'],
+  });
+
+  assert.deepEqual(graph.nodes.filter(node => node.kind === 'module').map(node => node.source.file), [
+    'src/changed.ts', 'src/helper.ts', 'src/port.ts',
+  ]);
+  assert.deepEqual(graph.edges.map(edge => [edge.from, edge.to, edge.kind]), [
+    ['type:src/changed.ts#Adapter', 'type:src/helper.ts#Helper', 'association'],
+    ['type:src/changed.ts#Adapter', 'type:src/port.ts#Port', 'implements'],
+    ['type:src/port.ts#Port', 'type:src/changed.ts#Adapter', 'association'],
+  ]);
+});
+
 test('recoverable semantic errors warn while syntax errors remain fatal', t => {
   const recoverable = project(t, { 'src/main.ts': 'class A { value: Missing; }\n' });
   const graph = extract(ts, { ...recoverable, scope: 'types' });
@@ -320,4 +349,18 @@ test('recoverable semantic errors warn while syntax errors remain fatal', t => {
 test('ambiguous declaration merging fails instead of guessing a semantic identity', t => {
   const input = project(t, { 'src/main.ts': 'interface A { one: string; }\ninterface A { two: string; }\n' });
   assert.throws(() => extract(ts, { ...input, scope: 'types' }), /declaration merging/i);
+});
+
+test('changed graphs apply node and edge limits after excluding unrelated types', t => {
+  const input = project(t, {
+    'src/main.ts': 'export class Changed {}\n',
+    'src/large.ts': Array.from({ length: 1000 }, (_, i) => `export class Unrelated${i} {}`).join('\n'),
+    'src/dense.ts': Array.from({ length: 72 }, (_, i) =>
+      `export class Dense${i} { ${Array.from({ length: 72 }, (_, j) => `p${j}: Dense${j};`).join(' ')} }`).join('\n'),
+  });
+  const graph = extract(ts, { ...input, scope: 'types', changedFiles: ['src/main.ts'] });
+  assert.deepEqual(graph.nodes.map(node => node.id), ['dir:src', 'file:src/main.ts', 'type:src/main.ts#Changed']);
+  assert.deepEqual(graph.edges, []);
+  assert.throws(() => extract(ts, { ...input, scope: 'types', changedFiles: ['src/large.ts'] }), /1000 nodes/);
+  assert.throws(() => extract(ts, { ...input, scope: 'types', changedFiles: ['src/dense.ts'] }), /5000 edges/);
 });

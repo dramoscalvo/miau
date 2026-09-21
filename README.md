@@ -57,12 +57,18 @@ extracts classes, abstract classes, interfaces, enums, inheritance, implements, 
 declared operation dependencies. It does not infer runtime calls, ownership, aggregation, composition, framework
 injection, or architecture layers. The command creates a new file and refuses to overwrite one.
 
-Add it as an optional [workflow command step](docs/configuration.md#add-a-typescript-diagram-step) to review the result
-in miau. Press `g` to open Diagram, select boxes and drill into their children, and open cited sources in your editor.
+miau's default workflow runs a `--scope types --changed` command after implementation, including new and edited
+TypeScript files and their directly related types. See the
+[workflow configuration](docs/configuration.md#add-a-typescript-diagram-step) to change the project scope or command.
+Press `g` to open Diagram, select boxes and drill into their children, and open cited sources in your editor.
 Planning and implementation reports request proposed and observed UMLs for structural changes. Browse their workflow
 steps with Left/Right to compare; use `n` to save notes on elements and `S` to request changes with those notes.
-Every workflow gate still waits for your decision. The [diagram guide](docs/diagrams.md) covers setup, reproducibility,
-controls, limitations, and the optional artifact format for proposed designs.
+When no TypeScript files changed, the command records that no graph applies. Every workflow gate still waits for your
+decision. The [diagram guide](docs/diagrams.md) covers setup, reproducibility, controls, limitations, and the optional
+artifact format for proposed designs.
+
+Outside a Git worktree, the changed-file step reports that the changed files cannot be determined and produces no
+diagram. It still returns to the human review gate. Missing Git and other Git errors remain failures.
 
 ## Configuration
 

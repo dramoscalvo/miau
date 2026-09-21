@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { builtinModules, createRequire } = require('node:module');
 
 const MODULE_VERSION = 1;
-const TYPE_VERSION = 2;
+const TYPE_VERSION = 3;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const slash = value => value.split(path.sep).join('/');
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -179,7 +179,7 @@ function extractModules(ts, { root, config, title = 'TypeScript module dependenc
   return graph;
 }
 
-function extractTypes(ts, { root, config, title = 'TypeScript type relationships' }) {
+function extractTypes(ts, { root, config, title = 'TypeScript type relationships', changedFiles }) {
   const [major, minor] = ts.version.split('.').map(Number);
   if (!(major === 6 || (major === 5 && minor >= 6))) {
     throw new Error('The extractor requires the TypeScript 5.6–6.x JavaScript compiler API');
@@ -265,7 +265,7 @@ function extractTypes(ts, { root, config, title = 'TypeScript type relationships
   }
   function addNode(node) {
     nodes.set(node.id, node);
-    if (nodes.size > 1000) throw new Error('Diagram exceeds 1000 nodes; select a smaller tsconfig');
+    if (changedFiles === undefined && nodes.size > 1000) throw new Error('Diagram exceeds 1000 nodes; select a smaller tsconfig');
   }
   function fileNode(file) {
     const name = relative(file);
@@ -290,6 +290,13 @@ function extractTypes(ts, { root, config, title = 'TypeScript type relationships
       return false;
     })
     .sort((a, b) => compare(relative(a.fileName), relative(b.fileName)));
+  const changedSourceFiles = changedFiles === undefined ? undefined : new Set(
+    changedFiles.map(file => relative(path.resolve(root, file)))
+      .filter(file => sourceFiles.some(source => relative(source.fileName) === file)),
+  );
+  if (changedSourceFiles?.size === 0) {
+    throw new Error('No changed TypeScript source files are included in the selected tsconfig');
+  }
   for (const source of sourceFiles) fileNode(source.fileName);
 
   function declarationKind(node) {
@@ -420,7 +427,7 @@ function extractTypes(ts, { root, config, title = 'TypeScript type relationships
       || (candidate.source.file === current.source.file && candidate.position < current.position)) {
       relations.set(key, candidate);
     }
-    if (relations.size > 5000) throw new Error('Diagram exceeds 5000 edges');
+    if (changedFiles === undefined && relations.size > 5000) throw new Error('Diagram exceeds 5000 edges');
   }
   function addTypeRelations(from, typeNode, kind, evidence = typeNode, options) {
     for (const target of resolveTypeTargets(typeNode, options)) addRelation(from, target, kind, evidence);
@@ -463,19 +470,53 @@ function extractTypes(ts, { root, config, title = 'TypeScript type relationships
     }
   }
 
+  let graphNodes = [...nodes.values()];
+  let graphEdges = [...relations.values()];
+  if (changedSourceFiles) {
+    const changedTypes = new Set(declarations
+      .filter(declaration => changedSourceFiles.has(declaration.file))
+      .map(declaration => declaration.id));
+    const impactedTypes = new Set(changedTypes);
+    graphEdges = graphEdges.filter(edge => {
+      if (!changedTypes.has(edge.from) && !changedTypes.has(edge.to)) return false;
+      impactedTypes.add(edge.from);
+      impactedTypes.add(edge.to);
+      return true;
+    });
+    const includedFiles = new Set(changedSourceFiles);
+    for (const declaration of declarations) {
+      if (impactedTypes.has(declaration.id)) includedFiles.add(declaration.file);
+    }
+    const includedIds = new Set([
+      ...[...includedFiles].map(file => `file:${file}`),
+      ...impactedTypes,
+    ]);
+    graphNodes = graphNodes.filter(node => includedIds.has(node.id));
+    for (const node of graphNodes) {
+      let parent = node.parent;
+      while (parent) {
+        includedIds.add(parent);
+        parent = nodes.get(parent)?.parent;
+      }
+    }
+    graphNodes = [...nodes.values()].filter(node => includedIds.has(node.id));
+  }
+  if (graphNodes.length > 1000) throw new Error('Diagram exceeds 1000 nodes');
+  if (graphEdges.length > 5000) throw new Error('Diagram exceeds 5000 edges');
   const inputs = [...reads].sort(([a], [b]) => compare(a, b));
   const provenance = {
     extractor: 'miau-typescript', version: TYPE_VERSION, typescript: ts.version,
     project: configName, scope: 'type-relations',
-    fingerprint: digest(JSON.stringify({ version: TYPE_VERSION, scope: 'type-relations', typescript: ts.version, project: configName, inputs })),
+    fingerprint: digest(JSON.stringify({ version: TYPE_VERSION, scope: 'type-relations', typescript: ts.version,
+      project: configName, changedFiles: changedSourceFiles ? [...changedSourceFiles].sort(compare) : null, inputs })),
     warnings: [...warnings].sort(compare),
   };
-  const edges = [...relations.values()]
+  const edges = graphEdges
     .sort((a, b) => compare(a.from, b.from) || compare(a.to, b.to) || compare(a.kind, b.kind)
       || compare(a.source.file, b.source.file) || a.source.line - b.source.line || a.position - b.position)
     .map(({ position: _, ...edge }) => edge);
   const graph = { version: 2, title, status: 'observed', provenance,
-    nodes: [...nodes.values()].sort((a, b) => compare(a.id, b.id)), edges };
+    nodes: graphNodes.sort((a, b) => compare(a.id, b.id)), edges };
   if (Buffer.byteLength(JSON.stringify(graph, null, 2)) > 1048576) throw new Error('Diagram exceeds 1 MiB');
   return graph;
 }
@@ -497,7 +538,9 @@ if (process.env.MIAU_TYPESCRIPT_EXTRACT === '1') {
     let ts;
     try { ts = projectRequire('typescript'); }
     catch { throw new Error('TypeScript is not installed for this project. Install its locked dependencies first.'); }
-    process.stdout.write(JSON.stringify(extract(ts, { config, root, title, scope })));
+    const changedFiles = process.env.MIAU_CHANGED_FILES === undefined
+      ? undefined : JSON.parse(process.env.MIAU_CHANGED_FILES);
+    process.stdout.write(JSON.stringify(extract(ts, { config, root, title, scope, changedFiles })));
   } catch (error) {
     process.stderr.write(`TypeScript extraction failed: ${error.message}\n`);
     process.exitCode = 1;

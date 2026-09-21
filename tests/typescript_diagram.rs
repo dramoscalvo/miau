@@ -74,6 +74,7 @@ fn typescript_command_is_documented_in_cli_help() {
     let help = String::from_utf8_lossy(&result.stdout);
     assert!(help.contains("--project"));
     assert!(help.contains("--scope"));
+    assert!(help.contains("--changed"));
     assert!(help.contains("modules"));
     assert!(help.contains("types"));
 }

@@ -17,7 +17,8 @@ impl DiagramExtractor for TypeScriptExtractor {
     fn extract(&self, request: &ExtractionRequest<'_>) -> Result<Graph, ExtractionError> {
         let project = request.project.canonicalize()?;
         let root = request.root.canonicalize()?;
-        let output = Command::new(&self.node)
+        let mut command = Command::new(&self.node);
+        command
             .arg("-e")
             .arg(include_str!("typescript.cjs"))
             .arg("--")
@@ -27,8 +28,11 @@ impl DiagramExtractor for TypeScriptExtractor {
             .arg(request.scope.argument())
             .env("MIAU_TYPESCRIPT_EXTRACT", "1")
             .current_dir(&root)
-            .stdin(Stdio::null())
-            .output()?;
+            .stdin(Stdio::null());
+        if let Some(changed_files) = request.changed_files {
+            command.env("MIAU_CHANGED_FILES", serde_json::to_string(changed_files)?);
+        }
+        let output = command.output()?;
         if !output.status.success() {
             return Err(ExtractionError::Invalid(format!(
                 "TypeScript extractor exited with {}: {}",
