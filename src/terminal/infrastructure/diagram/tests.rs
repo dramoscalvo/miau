@@ -193,3 +193,76 @@ fn diagram_disk_reload_and_source_selection_preserve_persisted_run() {
     assert!(app.ui.diagram.graph.is_none());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn uml_renders_compartments_and_connected_realization_arrow() {
+    let artifact = r##"# Handoff
+```miau-graph
+{"version":2,"title":"Storage","status":"proposed","nodes":[
+{"id":"adapter","label":"FileRepository","kind":"class","attributes":["- path: Path"],"operations":["+ save(): Result"]},
+{"id":"port","label":"Repository","kind":"interface","attributes":[],"operations":["+ save(): Result"]}],
+"edges":[{"from":"adapter","to":"port","kind":"implements"}]}
+```
+"##;
+    let mut model = Model::default();
+    model.diagram.load(artifact);
+    for (width, height) in [(140, 40), (65, 25), (10, 4), (1, 1)] {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| super::render(frame, frame.area(), &model, "plan"))
+            .unwrap();
+        if width == 140 {
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains("UML classes"), "{text}");
+            assert!(text.contains("- path: Path"));
+            assert!(text.contains("+ save(): Result"));
+            assert!(text.contains("«interface»"));
+            assert!(text.contains("┼"));
+            assert!(text.contains("╌╌▷"), "missing realization arrow: {text}");
+        }
+    }
+}
+
+#[test]
+fn uml_relationship_navigation_brings_later_neighbors_into_view() {
+    let graph = serde_json::json!({
+        "version": 2, "title": "Related classes", "status": "proposed",
+        "nodes": (0..6).map(|index| serde_json::json!({
+            "id": format!("c{index}"), "label": format!("Class{index}"), "kind": "class",
+            "attributes": [], "operations": []
+        })).collect::<Vec<_>>(),
+        "edges": (1..6).map(|index| serde_json::json!({
+            "from": "c0", "to": format!("c{index}"), "kind": "association"
+        })).collect::<Vec<_>>()
+    });
+    let mut model = Model::default();
+    model
+        .diagram
+        .load(&format!("# Handoff\n```miau-graph\n{graph}\n```\n"));
+    for _ in 0..4 {
+        model.update(Message::DiagramNextRelation);
+    }
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    terminal
+        .draw(|frame| super::render(frame, frame.area(), &model, "implementation"))
+        .unwrap();
+    let text: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(text.contains("Class5"));
+    assert!(text.contains("relationship 5/5"));
+    model.update(Message::DiagramChild);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "c5");
+    model.update(Message::DiagramParent);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "c0");
+}

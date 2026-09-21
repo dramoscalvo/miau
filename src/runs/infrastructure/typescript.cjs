@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { builtinModules, createRequire } = require('node:module');
 
 const MODULE_VERSION = 1;
-const TYPE_VERSION = 3;
+const TYPE_VERSION = 4;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const slash = value => value.split(path.sep).join('/');
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -410,6 +410,63 @@ function extractTypes(ts, { root, config, title = 'TypeScript type relationships
       ts.SyntaxKind.PublicKeyword, ts.SyntaxKind.ProtectedKeyword, ts.SyntaxKind.PrivateKeyword,
       ts.SyntaxKind.ReadonlyKeyword,
     ].includes(modifier.kind)) ?? false;
+  }
+
+  // Member signatures are source declarations, never method bodies or runtime values.
+  function singleLine(text) { return text.replace(/\s+/g, ' ').trim(); }
+  function visibility(member) {
+    if (hasModifier(member, ts.SyntaxKind.PrivateKeyword) || (member.name && ts.isPrivateIdentifier(member.name))) return '-';
+    if (hasModifier(member, ts.SyntaxKind.ProtectedKeyword)) return '#';
+    return '+';
+  }
+  function memberType(member) {
+    return singleLine(member.type?.getText() ?? checker.typeToString(checker.getTypeAtLocation(member), member,
+      ts.TypeFormatFlags.NoTruncation));
+  }
+  function qualifiers(member) {
+    const flags = [];
+    if (hasModifier(member, ts.SyntaxKind.StaticKeyword)) flags.push('static');
+    if (hasModifier(member, ts.SyntaxKind.AbstractKeyword)) flags.push('abstract');
+    if (hasModifier(member, ts.SyntaxKind.ReadonlyKeyword)) flags.push('readOnly');
+    return flags.length ? ` {${flags.join(', ')}}` : '';
+  }
+  function attribute(member) {
+    return `${visibility(member)} ${singleLine(member.name.getText())}${member.questionToken ? '?' : ''}: ${memberType(member)}${qualifiers(member)}`;
+  }
+  function operation(member) {
+    const constructor = ts.isConstructorDeclaration(member);
+    const name = constructor ? 'constructor' : ts.isConstructSignatureDeclaration(member) ? 'new'
+      : ts.isCallSignatureDeclaration(member) ? 'call'
+      : `${ts.isGetAccessorDeclaration(member) ? 'get ' : ts.isSetAccessorDeclaration(member) ? 'set ' : ''}${singleLine(member.name.getText())}`;
+    const generics = member.typeParameters?.length
+      ? `<${member.typeParameters.map(parameter => singleLine(parameter.getText())).join(', ')}>` : '';
+    const parameters = member.parameters.map(parameter =>
+      `${parameter.dotDotDotToken ? '...' : ''}${singleLine(parameter.name.getText())}${parameter.questionToken || parameter.initializer ? '?' : ''}: ${memberType(parameter)}`).join(', ');
+    const signature = checker.getSignatureFromDeclaration(member);
+    const result = constructor ? '' : `: ${singleLine(member.type?.getText() ??
+      (signature ? checker.typeToString(checker.getReturnTypeOfSignature(signature), member, ts.TypeFormatFlags.NoTruncation) : 'unknown'))}`;
+    return `${visibility(member)} ${name}${member.questionToken ? '?' : ''}${generics}(${parameters})${result}${qualifiers(member)}`;
+  }
+  for (const { id, declaration } of declarations) {
+    const attributes = [];
+    const operations = [];
+    for (const member of declaration.members ?? []) {
+      if (ts.isEnumMember(member)) attributes.push(singleLine(member.name.getText()));
+      else if (ts.isPropertyDeclaration(member) || ts.isPropertySignature(member)) attributes.push(attribute(member));
+      else if (ts.isConstructorDeclaration(member) || ts.isMethodDeclaration(member) || ts.isMethodSignature(member)
+        || ts.isConstructSignatureDeclaration(member) || ts.isCallSignatureDeclaration(member)
+        || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) {
+        operations.push(operation(member));
+        if (ts.isConstructorDeclaration(member)) {
+          for (const parameter of member.parameters) {
+            if (isParameterProperty(parameter, member)) attributes.push(attribute(parameter));
+          }
+        }
+      } else {
+        warning(member, 'unsupported class member omitted from UML compartments');
+      }
+    }
+    Object.assign(nodes.get(id), { attributes, operations });
   }
 
   const relations = new Map();

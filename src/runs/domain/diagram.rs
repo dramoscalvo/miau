@@ -28,6 +28,10 @@ pub struct Node {
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<NodeKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operations: Option<Vec<String>>,
     pub parent: Option<String>,
     pub source: Option<Source>,
 }
@@ -45,6 +49,13 @@ pub enum NodeKind {
 }
 
 impl NodeKind {
+    pub fn is_classifier(self) -> bool {
+        matches!(
+            self,
+            Self::Class | Self::AbstractClass | Self::Interface | Self::Enum
+        )
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Directory => "Directory",

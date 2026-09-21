@@ -2,21 +2,36 @@
 
 [Back to usage](usage.md)
 
-Planning and implementation reports provide two review points: a **Proposed** UML before implementation, and an
-**Observed** snapshot of the resulting implementation. The shared output contract and bundled roles request these
-for structural changes, with stable entity IDs across stages and an explanation of deviations in the implementation
-report. For changes without meaningful structural relationships, agents explain why a diagram is not applicable.
-These are agent instructions, not an automatic completeness check or approval rule.
+Planning and implementation reports provide two review points: a **Proposed UML class diagram** before implementation,
+and an **Observed UML class diagram** of the resulting code. The shared output contract and bundled roles request
+version 2 classifier nodes with attributes, operations, and UML relationships. A module dependency graph does not
+satisfy that request. Stable type IDs let you retain selection when browsing between the plan and implementation.
+Agents explain deviations from the plan and disclose omitted members. For changes without meaningful class/type
+relationships, they explain why a class diagram is not applicable. These are agent instructions, not an automatic
+completeness check or approval rule.
 
-Press `g` to open Diagram directly, or `v` to reach it after Git changes. Select component/type boxes, drill into their
-children, inspect relationships, and save notes on individual elements. Left/Right browses workflow steps while keeping
-Diagram open and retaining the selected entity when its ID exists in the other snapshot. Review the planning diagram
-before approving implementation, then inspect the implementation diagram before approving the result. Each diagram
-stays in its own versioned artifact; comparison is by browsing steps, not a side-by-side diff.
+Press `g` to open Diagram, or `v` to reach it after Git changes. Graphs containing class, abstract-class, interface,
+or enum nodes open the UML class view automatically. Classes appear across module/package containers, with name,
+attribute, and operation compartments. Interfaces show `«interface»`, abstract classes show `{abstract}`, and enums
+show `«enumeration»`. Empty member arrays mean empty compartments; absent arrays show **not recorded**, rather than
+claiming that an older artifact describes a class with no members.
 
-An artifact carries one `miau-graph` JSON fence in its `# Handoff` section. TypeScript module dependencies and semantic
-type relationships can also be extracted with the deterministic command below. Interaction uses the keyboard; freeform
-canvas positioning, connected-arrow layout, mouse box selection, and metrics overlays are not included.
+The canvas focuses on the selected class and its relationships, four at a time. It draws a neighboring box for each
+relationship, so a type may appear more than once; IDs in the details identify the actual entities, including self
+relationships. Solid lines with hollow triangles show inheritance; dashed lines with hollow triangles show interface
+implementation. Dependencies use dashed arrows; associations use solid lines. Hollow/filled diamonds show aggregation/
+composition at the whole end. The active relationship is highlighted. Use `}` to cycle relationships, Enter to follow
+the active relationship, and Backspace to return. Use Up/Down or `j`/`k` to select any class, including disconnected types.
+
+Use uppercase `H`/`J`/`K`/`L` to pan left/down/up/right and Home to reset the canvas. Narrow terminals may need horizontal
+panning to see both ends. Long signatures are clipped in boxes; their full text remains in the scrollable class details.
+Page Up/Page Down scrolls those details. Class notes, source opening, reload, and human review gates work as before.
+Left/Right browses workflow steps while retaining selection by type ID, so you can inspect the plan and implementation
+without leaving Diagram. Each diagram stays in its own versioned artifact; there is no side-by-side diff.
+
+Existing artifacts are preserved. Untyped/module-only graphs retain the hierarchy browser. Request an updated version 2
+class diagram through Request changes to replace an old planning or implementation diagram. A report carries one
+`miau-graph` JSON fence inside `# Handoff`; ordinary Mermaid/text fences do not activate the interactive view.
 
 ## Deterministic TypeScript extraction
 
@@ -118,7 +133,12 @@ declared relationship produces a deterministic warning and no edge; declaration 
 not guessed. Merged supported declarations fail because they lack one unambiguous milestone identity, while nested or
 anonymous supported declarations produce warnings and are omitted.
 
-The type graph is a compiler-derived semantic relationship graph. It is not a runtime object graph, call graph,
+Type nodes also record declared attributes and operation signatures, including visibility, parameter/return types,
+constructor parameter properties, and static/abstract/readonly modifiers. Enum compartments list literal names.
+Inherited members are not copied into subclasses. Unsupported member forms produce warnings. Member signatures use
+source annotations where present and compiler-inferred types otherwise; bodies and initializers are not copied.
+
+The type graph is a compiler-derived class model. It is not a runtime object graph, call graph,
 ownership model, or complete UML interpretation. In particular, visibility, `readonly`, property initializers, and
 constructor parameter properties never imply aggregation or composition. Framework and decorator conventions are
 irrelevant to extraction.
@@ -153,9 +173,11 @@ opening sources, and saving notes never approve a step or start an agent.
 | Key | Action |
 | --- | --- |
 | `g` | Open Diagram directly from another artifact view. |
-| Up/Down or `k`/`j` | Select a box at the current hierarchy level. |
-| Enter | Drill into the selected box, showing its children. |
-| Backspace | Return to the parent level, selecting the container. |
+| Up/Down or `k`/`j` | Select a class; in legacy graphs, select a box at the current hierarchy level. |
+| Enter | Follow the active UML relationship; in legacy graphs, drill into children. |
+| Backspace | Return to the previous class; in legacy graphs, return to the parent level. |
+| `}` | Cycle the selected class's relationships and their pages. |
+| `H`/`J`/`K`/`L`, Home | Pan the UML canvas left/down/up/right, or reset its position. |
 | Page Up/Page Down | Scroll the selected node's relationship details. |
 | `]` | Cycle through its source reference and the sources cited by its relationships. |
 | `o` | Open the selected source file in `$EDITOR` (default `vi`) while no process is active. |
@@ -204,14 +226,15 @@ Proposed storage boundary; inspect the relationship before approving.
 # Handoff
 ```miau-graph
 {
-  "version": 1,
-  "title": "Storage boundary",
+  "version": 2,
+  "title": "Storage classes",
   "status": "proposed",
   "nodes": [
-    {"id": "storage", "label": "Storage"},
-    {"id": "port", "label": "Repository", "parent": "storage",
+    {"id": "port", "label": "Repository", "kind": "interface",
+     "attributes": [], "operations": ["+ save(artifact: Artifact): Result"],
      "source": {"file": "src/repository.rs", "line": 12}},
-    {"id": "files", "label": "FileRepository", "parent": "storage"}
+    {"id": "files", "label": "FileRepository", "kind": "class",
+     "attributes": ["- root: Path"], "operations": ["+ save(artifact: Artifact): Result"]}
   ],
   "edges": [
     {"from": "files", "to": "port", "kind": "implements"}
@@ -226,7 +249,7 @@ edge requires a source reference. Without generator metadata, Observed is labell
 independently verify a cited line, and references may become stale as source files change.
 
 The module generator remains on graph version 1 for byte-compatible output. Type scope emits graph version 2 and
-provenance rule version 3.
+provenance rule version 4.
 
 An observed graph may also contain `provenance` with `extractor`, positive integer `version`, `typescript`, `project`,
 `scope`, a 64-digit hexadecimal SHA-256 `fingerprint`, and a `warnings` string array. `project` is a relative config
@@ -236,13 +259,22 @@ the extraction rules. Provenance scope is `module-dependencies` for module scope
 Nodes require nonblank `id` and `label` strings; optional `parent` references another node's ID. Version 2 also accepts
 an optional semantic `kind`: `directory`, `module`, `class`, `abstract-class`, `interface`, `enum`, or `external`.
 Unknown kinds are rejected. Version 1 artifacts remain valid. IDs must be unique and should remain stable across
-revisions. Roots and siblings display in document order; Enter reveals a selected node's children.
+revisions. Classifiers display in document order, independent of their containers. Legacy roots and siblings retain
+hierarchy order, with Enter revealing a selected node's children.
+
+Version 2 classifier nodes accept optional `attributes` and `operations` arrays of nonblank, single-line strings.
+Use UML signatures such as `- path: Path`, `+ save(value: Artifact): Result`, and `# count: number {static}`.
+`+`, `-`, and `#` mean public, private, and protected. `{readOnly}` and `{abstract}` retain those modifiers.
+Enum attributes list literals. Include both arrays in new planning/implementation diagrams, using `[]` for empty
+compartments. Omitted fields represent unknown members. Member fields on container nodes or version 1 graphs are rejected.
 The optional node `source` has `file` and `line`. Paths use `/`, are relative to the project, and cannot contain
 `.` or `..` segments, backslashes, colons, or control characters. Lines must be positive integers.
 
 Edges require `from`, `to`, and `kind`; endpoints must exist. Kinds are `dependency`, `association`, `implements`,
 `inheritance`, `aggregation`, and `composition`. Optional `label` adds context, and optional `source` uses the same
-shape as a node's reference. Dependency cycles and self-references are allowed; parent cycles are not.
+shape as a node's reference. Inheritance and implementation point from subtype/implementer to supertype/interface;
+aggregation and composition run from whole to part, with the diamond at `from`. Dependency cycles and self-references
+are allowed; parent cycles are not.
 
 Unknown fields are rejected to expose typos. Limits are 1 MiB of diagram JSON, 1000 nodes, and 5000 edges. Keep diagrams
 focused on relationships that help the current review. These limits and validation errors affect presentation only;

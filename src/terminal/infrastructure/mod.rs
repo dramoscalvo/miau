@@ -89,6 +89,12 @@ fn diagram_message(code: KeyCode) -> Option<Message> {
         KeyCode::Enter => Some(Message::DiagramChild),
         KeyCode::Backspace => Some(Message::DiagramParent),
         KeyCode::Char(']') => Some(Message::DiagramNextSource),
+        KeyCode::Char('}') => Some(Message::DiagramNextRelation),
+        KeyCode::Char('H') => Some(Message::DiagramPan { x: -8, y: 0 }),
+        KeyCode::Char('L') => Some(Message::DiagramPan { x: 8, y: 0 }),
+        KeyCode::Char('K') => Some(Message::DiagramPan { x: 0, y: -4 }),
+        KeyCode::Char('J') => Some(Message::DiagramPan { x: 0, y: 4 }),
+        KeyCode::Home => Some(Message::DiagramHome),
         _ => None,
     }
 }

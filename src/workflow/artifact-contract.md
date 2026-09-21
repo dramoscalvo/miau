@@ -22,58 +22,77 @@ choice, request that choice using the decision format below and reference the
 finding's severity/evidence in its context. Recommending an option for a question
 is allowed; approving or rejecting the workflow step belongs to the operator.
 
-Before implementation, include a focused proposed design diagram when the change
-involves components, types, or their relationships. After implementation, include
-an observed diagram of the resulting code and explain deviations from the approved
-design in Review. Preserve the earlier planning artifact and reuse node IDs for
-the same entities across both stages. Critiques/reviews can reference these diagrams
-without duplicating them. For changes without meaningful structural relationships,
-explain why a diagram is not applicable instead of inventing structure.
+Before implementation, include a focused proposed UML class diagram when the change
+involves types or their relationships. After implementation, include an observed UML
+class diagram of the resulting code and explain deviations from the approved design
+in Review. Preserve the planning artifact and reuse node IDs for the same types
+across both stages. Critiques/reviews can reference these diagrams without duplicating
+them. For changes without meaningful class/type relationships, explain why a class
+diagram is not applicable instead of inventing classes for files or functions.
 
 Include one JSON code fence tagged `miau-graph` inside Handoff per artifact.
-This creates miau's interactive Diagram view with selectable boxes and node notes. Keep
-the human explanation in Review and the complete graph in the same artifact.
-Use this version 1 format (replace the example with relevant project entities):
+This creates miau's navigable UML class view with connected arrows, member compartments,
+and notes on individual classes. Keep the human explanation in Review and the complete
+graph in the same artifact. Use version 2 and explicit classifier kinds. A directory
+or module dependency graph does not satisfy the class diagram requirement.
 
 ```miau-graph
-{"version":1,"title":"Storage boundary","status":"proposed",
- "nodes":[{"id":"storage","label":"Storage"},
-          {"id":"port","label":"Repository","parent":"storage",
-           "source":{"file":"src/repository.rs","line":1}},
-          {"id":"files","label":"FileRepository","parent":"storage"}],
+{"version":2,"title":"Storage classes","status":"proposed",
+ "nodes":[{"id":"port","label":"Repository","kind":"interface",
+           "attributes":[],"operations":["+ save(artifact: Artifact): Result"]},
+          {"id":"files","label":"FileRepository","kind":"class",
+           "attributes":["- root: Path"],"operations":["+ save(artifact: Artifact): Result"]}],
  "edges":[{"from":"files","to":"port","kind":"implements"}]}
 ```
 
-Group nodes using parents so the operator can drill into components. Human notes
-reference these stable node IDs; address submitted notes in the revised artifact.
-Browsing or saving notes is not approval; only explicit submission requests changes.
-Use stable, unique node IDs and real project-relative source paths with one-based
-line numbers. Nodes require `id` and `label`; `parent` and `source` are optional.
-Edges require `from`, `to`, and `kind`; `label` and `source` are optional. Allowed
-kinds: `dependency`, `association`, `implements`, `inheritance`, `aggregation`,
-`composition`. Endpoints and parents must reference existing IDs; hierarchy
-cycles are invalid, while dependency cycles are allowed. Required graph fields
-are `version`, `title`, `status`, `nodes`, and `edges`; extra fields are rejected.
-Use `status: "proposed"` for a design, or `status: "observed"` for relationships
-you inspected. Every observed edge must have a source reference supporting it.
-Never present proposed structure as observed or invent evidence. The diagram is
-agent-reported context, not independently verified analysis or approval. Limit
-it to the relevant subgraph (at most 1000 nodes, 5000 edges, and 1 MiB of JSON).
+Show the relevant classes, abstract classes, interfaces, and enums using `kind` values
+`class`, `abstract-class`, `interface`, and `enum`. Map Rust structs to class boxes and
+traits to interface boxes; explain language-specific mappings in Review when needed.
+Include `attributes` and `operations` arrays of single-line UML signatures on each
+classifier. Use `+` public, `-` private, `#` protected, names, parameter/return types,
+and `{static}`, `{abstract}`, or `{readOnly}` where applicable. Enum attributes list
+literals. Keep members focused on the change; disclose omitted members in Review.
+An empty array means no members in that compartment; omit a field only when members
+are unknown, in which case the viewer labels it not recorded. Do not invent members.
 
-For observed TypeScript module or semantic type relationships, use the deterministic generator:
-`miau diagram typescript --project tsconfig.json --root . --scope modules` or
-`--scope types`. Module scope is the default. Select the project's
-actual leaf tsconfig and use the run's project directory as root. It needs Node
-and the project's installed TypeScript compiler. Preserve the generated
-`miau-graph` block, including optional `provenance` metadata, in your Handoff;
-summarize relevant results and warnings in Review. Do not manually invent or
-repair extracted relationships, invent semantic nodes, convert associations to
-composition, classify directories as architecture layers, or repair unresolved
-compiler relationships manually. You may select the scope, invoke extraction,
-describe observed relationships, and interpret warnings. Report generation
-failures and missing tools instead of claiming an agent-authored graph was
-extracted. Put interpreted or redesigned architecture in a separate
-`status: "proposed"` diagram in a planning artifact.
+Use stable, unique type IDs across planning, revisions, and implementation. For TypeScript,
+use the extractor's canonical `type:<project-relative-path>#<declared-name>` IDs in the
+plan too (for example, `type:src/storage.ts#Repository`). Explain identity changes when
+moving or renaming a declaration. Human notes
+reference these IDs; address submitted notes in the revised artifact. Browsing or saving
+notes is not approval; only explicit submission requests changes. Optional `parent`
+references can preserve package/module grouping; the class view shows types together
+across those containers. Optional `source` uses a real project-relative `file` and a
+one-based `line`. Nodes require `id` and `label`.
+
+Edges require `from`, `to`, and `kind`; `label` and `source` are optional. Use
+`inheritance` from subtype to supertype, `implements` from class to interface,
+`dependency` from client to supplier, and `association` for a structural reference.
+Use `aggregation` or `composition` only when the whole/part relationship is known,
+with `from` as the whole and `to` as the part. Do not infer ownership from field
+visibility or readonly alone. The viewer draws UML triangles, diamonds, and solid
+or dashed connectors from these kinds. Endpoints and parents must reference existing
+IDs; hierarchy cycles are invalid, while relationship cycles and self-links are allowed.
+
+Required graph fields are `version`, `title`, `status`, `nodes`, and `edges`; extra
+fields are rejected. Use `status: "proposed"` for the plan, or `status: "observed"`
+for the implementation you inspected. Every observed edge must cite a supporting
+source reference. Never present proposed structure as observed or invent evidence.
+Agent-authored diagrams are reported context, not independent verification or approval.
+Limit the graph to the relevant types (at most 1000 nodes, 5000 edges, and 1 MiB of JSON).
+
+For observed TypeScript class diagrams, use the deterministic generator with
+`miau diagram typescript --project tsconfig.json --root . --scope types`.
+Select the project's actual leaf tsconfig and use the run's project directory as root.
+It needs Node and the project's installed TypeScript compiler. Preserve the generated
+`miau-graph` block, including its optional `provenance` metadata, in your Handoff;
+summarize relevant results and warnings in Review. Do not manually repair extracted
+relationships, invent semantic nodes, convert associations to composition, or alter
+member signatures. Report unavailable tools or generation failures honestly. For
+other languages, inspect source and supply an agent-reported observed class diagram
+with evidence. Put intended designs in the separate proposed planning artifact.
+Module scope (`--scope modules`, the command default) is useful for import dependencies
+but does not substitute for the planning/implementation class diagram.
 
 For every role and agent, put questions requiring human input in Review as
 second-level headings: `## D1: Question?`, `## D2: Question?`, and so on. Each

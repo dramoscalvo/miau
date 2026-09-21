@@ -174,3 +174,139 @@ fn diagram_error_remains_inspectable_and_valid_reload_recovers() {
     model.diagram.load("# Review\nNo diagram\n# Handoff\nNotes");
     assert!(model.diagram.graph.is_none());
 }
+
+fn uml_artifact() -> String {
+    r##"# Handoff
+```miau-graph
+{"version":2,"title":"Classes","status":"proposed","nodes":[
+{"id":"module","label":"model.ts","kind":"module"},
+{"id":"a","label":"Service","kind":"class","parent":"module",
+ "attributes":["- name: string"],"operations":["+ run(): void"]},
+{"id":"b","label":"Port","kind":"interface","parent":"module","attributes":[],"operations":[]},
+{"id":"c","label":"Other","kind":"class"}],
+"edges":[{"from":"a","to":"b","kind":"implements"},
+{"from":"a","to":"c","kind":"dependency"}]}
+```
+"##
+    .into()
+}
+
+#[test]
+fn uml_navigation_flattens_types_and_follows_relationships_with_history() {
+    let mut model = Model::default();
+    model.mode = Mode::Gate;
+    model.diagram.load(&uml_artifact());
+    assert!(model.diagram.error.is_none(), "{:?}", model.diagram.error);
+    assert_eq!(model.diagram.rows.len(), 3);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "a");
+    model.update(Message::DiagramChild);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "b");
+    model.update(Message::DiagramParent);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "a");
+    model.update(Message::DiagramNext);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "b");
+    model.diagram.load(&uml_artifact());
+    assert_eq!(model.diagram.selected_node().unwrap().id, "b");
+    assert_eq!(model.mode, Mode::Gate);
+    assert!(model.pending_prompt.is_none());
+}
+
+#[test]
+fn uml_member_compartments_round_trip_and_reject_invalid_signatures() {
+    let graph = parse(&uml_artifact()).unwrap().unwrap();
+    let encoded = serde_json::to_value(&graph).unwrap();
+    assert_eq!(encoded["nodes"][1]["attributes"][0], "- name: string");
+    assert_eq!(encoded["nodes"][1]["operations"][0], "+ run(): void");
+    assert!(parse(&uml_artifact().replace("- name: string", "")).is_err());
+}
+
+#[test]
+fn shared_workflow_contract_example_is_a_navigable_uml_class_model() {
+    let contract = include_str!("../src/workflow/artifact-contract.md");
+    let json = contract
+        .split("```miau-graph\n")
+        .nth(1)
+        .unwrap()
+        .split("```")
+        .next()
+        .unwrap();
+    let mut model = Model::default();
+    model
+        .diagram
+        .load(&format!("# Handoff\n```miau-graph\n{json}```\n"));
+    assert!(model.diagram.is_uml());
+    for node in &model.diagram.graph.as_ref().unwrap().nodes {
+        if node.kind.is_some_and(|kind| kind.is_classifier()) {
+            assert!(node.attributes.is_some());
+            assert!(node.operations.is_some());
+        }
+    }
+    for role in [
+        include_str!("../roles/planner.md"),
+        include_str!("../roles/implementer.md"),
+    ] {
+        assert!(role.contains("class diagram"));
+    }
+}
+
+#[test]
+fn uml_relationship_selection_pan_and_step_comparison_preserve_human_gate() {
+    let mut model = Model::default();
+    model.mode = Mode::Gate;
+    model.diagram.load(&uml_artifact());
+    model.update(Message::DiagramNextRelation);
+    model.update(Message::DiagramChild);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "c");
+    model.update(Message::DiagramPan { x: 8, y: 4 });
+    assert_eq!((model.diagram.pan_x, model.diagram.pan_y), (8, 4));
+    model.update(Message::DiagramHome);
+    assert_eq!((model.diagram.pan_x, model.diagram.pan_y), (0, 0));
+    let observed = uml_artifact()
+        .replace("proposed", "observed")
+        .replace(
+            "\"kind\":\"implements\"",
+            "\"kind\":\"implements\",\"source\":{\"file\":\"model.ts\",\"line\":1}",
+        )
+        .replace(
+            "\"kind\":\"dependency\"",
+            "\"kind\":\"dependency\",\"source\":{\"file\":\"model.ts\",\"line\":2}",
+        );
+    model.diagram.load(&observed);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "c");
+    assert_eq!(
+        model.diagram.graph.as_ref().unwrap().status,
+        miau::runs::domain::diagram::Status::Observed
+    );
+    assert_eq!(model.mode, Mode::Gate);
+    assert!(model.pending_prompt.is_none());
+}
+
+#[test]
+fn uml_changed_members_invalidate_notes_and_legacy_members_remain_unknown() {
+    use miau::runs::application::diagram_notes::Notes;
+    let graph = parse(&uml_artifact()).unwrap().unwrap();
+    let mut notes = Notes::default();
+    notes.set(&graph, "a", "Make name public".into());
+    let changed = parse(&uml_artifact().replace("- name: string", "+ name: string"))
+        .unwrap()
+        .unwrap();
+    assert!(notes.feedback(&changed).is_none());
+    assert!(notes.feedback(&graph).is_some());
+    let legacy = parse(ARTIFACT).unwrap().unwrap();
+    assert!(
+        legacy
+            .nodes
+            .iter()
+            .all(|node| node.attributes.is_none() && node.operations.is_none())
+    );
+    for invalid in [
+        uml_artifact().replace("- name: string", "name\\nstring"),
+        uml_artifact().replace(
+            "\"kind\":\"class\",\"parent\"",
+            "\"kind\":\"module\",\"parent\"",
+        ),
+        uml_artifact().replace("\"version\":2", "\"version\":1"),
+    ] {
+        assert!(parse(&invalid).is_err());
+    }
+}

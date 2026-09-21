@@ -93,6 +93,21 @@ fn validate(graph: &Graph) -> Result<(), String> {
         if node.id.trim().is_empty() || node.label.trim().is_empty() {
             return Err("Diagram node needs a nonblank id and label".into());
         }
+        if node.attributes.is_some() || node.operations.is_some() {
+            if graph.version < 2 || !node.kind.is_some_and(|kind| kind.is_classifier()) {
+                return Err("UML members require a version 2 classifier node".into());
+            }
+            for member in node
+                .attributes
+                .iter()
+                .chain(node.operations.iter())
+                .flatten()
+            {
+                if member.trim().is_empty() || member.chars().any(char::is_control) {
+                    return Err("UML member signatures must be nonblank single lines".into());
+                }
+            }
+        }
         if nodes.insert(node.id.as_str(), node).is_some() {
             return Err(format!("Duplicate diagram node: {}", node.id));
         }

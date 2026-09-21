@@ -159,3 +159,9 @@ Only explicit submission enters the existing revision use case; cancelling
 leaves the workflow gate unchanged. The resumed session supplies discussion
 context, without transcript forwarding. Disk edits made during the interactive
 session remain canonical even when the update request is cancelled.
+
+The UML class renderer reads version 2 classifier members from the artifact and draws a bounded neighborhood with
+UML connectors. Class selection, relationship traversal, history, and pan state belong to the terminal application
+layer; terminal geometry and drawing belong to infrastructure. Planning and implementation prompts request the same
+class model format and stable IDs. Legacy untyped graphs retain the hierarchy renderer. Member changes alter the
+graph snapshot identity used for notes, so old notes cannot silently attach to a changed class model.

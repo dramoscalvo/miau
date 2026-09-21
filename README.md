@@ -42,6 +42,12 @@ and revisiting steps.
 
 ## Architecture diagrams
 
+Planning reports request a proposed UML class diagram; implementation reports request an observed one with the same
+type IDs. The TUI draws class compartments and connected UML arrows. Press `g` to open it, `j`/`k` to select a class,
+`}` to select a relationship, Enter to follow it, and Backspace to return. Use `H`/`J`/`K`/`L` to pan and Home to reset.
+Left/Right compares workflow steps while retaining class selection. Existing reports are preserved; use Request changes
+to ask for an updated class diagram if an older report contains only a dependency graph.
+
 Extract a TypeScript project's module dependencies (the default) or semantic type relationships into a review
 artifact:
 
@@ -60,9 +66,8 @@ injection, or architecture layers. The command creates a new file and refuses to
 miau's default workflow runs a `--scope types --changed` command after implementation, including new and edited
 TypeScript files and their directly related types. See the
 [workflow configuration](docs/configuration.md#add-a-typescript-diagram-step) to change the project scope or command.
-Press `g` to open Diagram, select boxes and drill into their children, and open cited sources in your editor.
-Planning and implementation reports request proposed and observed UMLs for structural changes. Browse their workflow
-steps with Left/Right to compare; use `n` to save notes on elements and `S` to request changes with those notes.
+Open cited sources in your editor with `o`; use `n` to save notes on classes and `S` to request changes with those notes.
+Module-only graphs retain the hierarchy browser, with Enter to drill into children.
 When no TypeScript files changed, the command records that no graph applies. Every workflow gate still waits for your
 decision. The [diagram guide](docs/diagrams.md) covers setup, reproducibility, controls, limitations, and the optional
 artifact format for proposed designs.

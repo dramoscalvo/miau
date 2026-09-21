@@ -205,6 +205,12 @@ pub enum Message {
     DiagramChild,
     DiagramParent,
     DiagramNextSource,
+    DiagramNextRelation,
+    DiagramPan {
+        x: i16,
+        y: i16,
+    },
+    DiagramHome,
     Tick,
     ToggleFocus,
     ToggleDetailView {
@@ -467,6 +473,12 @@ impl Model {
                 self.flow_scroll = 0;
             }
             Message::DiagramNextSource => self.diagram.next_source(),
+            Message::DiagramNextRelation => self.diagram.next_relation(),
+            Message::DiagramPan { x, y } => self.diagram.pan(x, y),
+            Message::DiagramHome => {
+                self.diagram.pan_x = 0;
+                self.diagram.pan_y = 0;
+            }
             Message::Tick => self.spinner = (self.spinner + 1) % 4,
             Message::ToggleFocus => self.focus = self.focus.next(),
             Message::ToggleDetailView { has_review } => {

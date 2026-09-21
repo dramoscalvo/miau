@@ -364,3 +364,24 @@ test('changed graphs apply node and edge limits after excluding unrelated types'
   assert.throws(() => extract(ts, { ...input, scope: 'types', changedFiles: ['src/large.ts'] }), /1000 nodes/);
   assert.throws(() => extract(ts, { ...input, scope: 'types', changedFiles: ['src/dense.ts'] }), /5000 edges/);
 });
+
+test('UML compartments include visibility, signatures, parameter properties and enum literals', t => {
+  const input = project(t, { 'src/main.ts': [
+    'class Service {',
+    ' private name: string;',
+    ' protected static count = 1;',
+    ' constructor(public readonly port: Port, input: string) {}',
+    ' async run(value?: number): Promise<string> { return ""; }',
+    '}',
+    'interface Port { readonly id: string; save(value: string): void; }',
+    'enum State { Ready, Done }',
+  ].join('\n') });
+  const graph = extract(ts, { ...input, scope: 'types' });
+  const service = graph.nodes.find(node => node.label === 'Service');
+  assert.deepEqual(service.attributes, ['- name: string', '# count: number {static}', '+ port: Port {readOnly}']);
+  assert.deepEqual(service.operations, ['+ constructor(port: Port, input: string)', '+ run(value?: number): Promise<string>']);
+  const port = graph.nodes.find(node => node.label === 'Port');
+  assert.deepEqual(port.attributes, ['+ id: string {readOnly}']);
+  assert.deepEqual(port.operations, ['+ save(value: string): void']);
+  assert.deepEqual(graph.nodes.find(node => node.label === 'State').attributes, ['Ready', 'Done']);
+});

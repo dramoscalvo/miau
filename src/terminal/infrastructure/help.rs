@@ -197,7 +197,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         if !matches!(mode, Mode::RunList | Mode::Confirm(_)) {
             let view_hints = match detail_view {
                 DetailView::Diagram => {
-                    "v next view · j/k boxes · Enter drill in · Backspace out · n note · S send notes · ] source · o open · R reload · PgUp/PgDn details"
+                    "v next view · j/k select · } relationship · Enter follow/in · Backspace back · H/J/K/L pan · n note · S send notes · ] source · o open · R reload · PgUp/PgDn details"
                 }
                 DetailView::Decisions => {
                     "↑↓ decisions · Enter answer · S submit answers · v review · PgUp/PgDn scroll"

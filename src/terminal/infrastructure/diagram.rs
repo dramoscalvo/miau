@@ -1,6 +1,7 @@
 //! Terminal architecture hierarchy and relationship inspector.
 
 use super::pane;
+mod uml;
 use crate::{
     runs::domain::diagram::Status,
     terminal::application::{Focus, Model},
@@ -9,7 +10,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::Style,
-    text::Line,
+    text::{Line, Span},
     widgets::{Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 
@@ -18,17 +19,18 @@ mod notes_tests;
 #[cfg(test)]
 mod tests;
 
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
 
 fn box_line(text: &str, width: usize) -> String {
     let mut clipped = String::new();
     let mut used = 0;
-    for ch in text.chars().filter(|ch| !ch.is_control()) {
-        let cells = ch.width().unwrap_or(0);
+    let span = Span::raw(text);
+    for grapheme in span.styled_graphemes(Style::default()) {
+        let cells = grapheme.symbol.width();
         if used + cells > width {
             break;
         }
-        clipped.push(ch);
+        clipped.push_str(grapheme.symbol);
         used += cells;
     }
     format!(
@@ -39,6 +41,10 @@ fn box_line(text: &str, width: usize) -> String {
 }
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
+    if model.diagram.is_uml() {
+        uml::render(frame, area, model, step);
+        return;
+    }
     frame.render_widget(Clear, area);
     let diagram = &model.diagram;
     let focused = model.focus == Focus::Flow;

@@ -1,8 +1,8 @@
-//! Pure hierarchy navigation and the source-file lookup port.
+//! Pure class/relationship navigation, legacy hierarchy navigation, and source-file lookup.
 
 use crate::runs::{
     application::diagram::parse,
-    domain::diagram::{Graph, Node, Source},
+    domain::diagram::{Edge, Graph, Node, Source},
 };
 use std::{
     collections::HashSet,
@@ -18,11 +18,15 @@ pub trait SourceRepository {
 pub struct Diagram {
     pub graph: Option<Graph>,
     pub error: Option<String>,
-    /// Node index and depth at the current drill-down level.
+    /// Classifier indices in UML mode, or node indices/depth at the legacy hierarchy level.
     pub rows: Vec<(usize, usize)>,
     pub selected: usize,
     pub scope: Option<String>,
     pub source_selected: usize,
+    pub relation_selected: usize,
+    pub pan_x: usize,
+    pub pan_y: usize,
+    history: Vec<String>,
 }
 
 impl Diagram {
@@ -50,6 +54,47 @@ impl Diagram {
             Ok(None) => {}
             Err(error) => self.error = Some(error),
         }
+    }
+
+    pub fn is_uml(&self) -> bool {
+        self.graph.as_ref().is_some_and(|graph| {
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind.is_some_and(|kind| kind.is_classifier()))
+        })
+    }
+
+    pub fn relations(&self) -> Vec<&Edge> {
+        let (Some(graph), Some(node)) = (&self.graph, self.selected_node()) else {
+            return Vec::new();
+        };
+        graph
+            .edges
+            .iter()
+            .filter(|edge| edge.from == node.id || edge.to == node.id)
+            .collect()
+    }
+
+    pub fn next_relation(&mut self) {
+        let count = self.relations().len();
+        if count > 0 {
+            self.relation_selected = (self.relation_selected + 1) % count;
+            self.pan_x = 0;
+            self.pan_y = 0;
+        }
+    }
+
+    pub fn pan(&mut self, x: i16, y: i16) {
+        self.pan_x = self.pan_x.saturating_add_signed(isize::from(x)).min(256);
+        self.pan_y = self.pan_y.saturating_add_signed(isize::from(y));
+    }
+
+    fn reset_view(&mut self) {
+        self.source_selected = 0;
+        self.relation_selected = 0;
+        self.pan_x = 0;
+        self.pan_y = 0;
     }
 
     pub fn available(&self) -> bool {
@@ -93,16 +138,23 @@ impl Diagram {
         } else {
             self.selected.saturating_sub(1)
         };
-        self.source_selected = 0;
+        self.reset_view();
     }
 
     fn rebuild_rows(&mut self, selected: Option<&str>) {
         let Some(graph) = &self.graph else { return };
+        let uml = self.is_uml();
         self.rows = graph
             .nodes
             .iter()
             .enumerate()
-            .filter(|(_, node)| node.parent == self.scope)
+            .filter(|(_, node)| {
+                if uml {
+                    node.kind.is_some_and(|kind| kind.is_classifier())
+                } else {
+                    node.parent == self.scope
+                }
+            })
             .map(|(index, _)| (index, 0))
             .collect();
         self.selected = self
@@ -114,6 +166,31 @@ impl Diagram {
     }
 
     pub fn child(&mut self) {
+        if self.is_uml() {
+            let Some(node) = self.selected_node() else {
+                return;
+            };
+            let Some(edge) = self.relations().get(self.relation_selected).copied() else {
+                return;
+            };
+            let target = if edge.from == node.id {
+                &edge.to
+            } else {
+                &edge.from
+            };
+            let Some(graph) = &self.graph else { return };
+            let Some(index) = self
+                .rows
+                .iter()
+                .position(|(index, _)| graph.nodes[*index].id == *target)
+            else {
+                return;
+            };
+            self.history.push(node.id.clone());
+            self.selected = index;
+            self.reset_view();
+            return;
+        }
         let Some(node) = self.selected_node() else {
             return;
         };
@@ -129,6 +206,13 @@ impl Diagram {
     }
 
     pub fn parent(&mut self) {
+        if self.is_uml() {
+            if let Some(id) = self.history.pop() {
+                self.rebuild_rows(Some(&id));
+                self.reset_view();
+            }
+            return;
+        }
         let Some(parent) = self.scope.clone() else {
             return;
         };

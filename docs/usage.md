@@ -106,10 +106,11 @@ exceeds the pane. Old or incomplete artifacts without a separate review section 
 directly between that document and Git changes, skipping the duplicate summary view. Editing still opens the single
 canonical artifact, and the preview reloads after the editor returns. The one-screen target is guidance, not a
 truncation or approval rule. Ordinary diagrams and Gherkin remain text, and scenarios are not automatically executed.
-The output contract requests a proposed UML for structural plans and an observed UML after implementation. A
-`miau-graph` block in Handoff adds the interactive [Diagram view](diagrams.md). Press `g` to open it directly;
-Left/Right browses the before/after workflow steps. Select boxes with `j`/`k`, drill in with Enter, and return with
-Backspace. Press `n` to save a note on an element, then `S` to submit all current diagram notes as Request changes.
+The output contract requests a proposed UML class diagram for structural plans and an observed one after implementation.
+A `miau-graph` block in Handoff adds the interactive [Diagram view](diagrams.md), with member compartments and connected
+arrows. Press `g` to open it directly; Left/Right browses the before/after workflow steps. Select classes with `j`/`k`,
+cycle relationships with `}`, follow one with Enter, and return with Backspace. Press `n` to save a note on an element,
+then `S` to submit all current diagram notes as Request changes.
 Saving notes does not start an agent or approve the step. Approval remains the explicit `a` action.
 
 For TypeScript projects, add a [diagram command step](configuration.md#add-a-typescript-diagram-step) to generate a
@@ -144,3 +145,8 @@ again before implementation.
 From a project screen, press `b` to return to the initial run list. While an agent is running, stop it first; the
 project screen remains visible so active work cannot be hidden accidentally. Press `x` and confirm with `y` to stop the
 agent without quitting miau. The interrupted node remains at its decision gate.
+
+In UML class diagrams, `j`/`k` selects a class, `}` selects a relationship, Enter follows it, and Backspace returns.
+Use uppercase `H`/`J`/`K`/`L` to pan and Home to reset. Left/Right keeps Diagram open while browsing the planning and
+implementation steps, preserving the selected type when its stable ID exists in both artifacts. Older reports remain
+readable; use Request changes to ask the agent for a version 2 class diagram with attributes and operations.
