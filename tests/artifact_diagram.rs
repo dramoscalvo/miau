@@ -4,6 +4,31 @@ use miau::terminal::application::{DetailView, Message, Mode, Model};
 const ARTIFACT: &str = include_str!("fixtures/diagram.md");
 
 #[test]
+fn diagram_drills_into_one_level_and_returns_to_its_container() {
+    let mut model = Model::default();
+    model.diagram.load(ARTIFACT);
+    assert_eq!(model.diagram.rows.len(), 1);
+    model.update(Message::DiagramChild);
+    assert_eq!(model.diagram.rows.len(), 2);
+    model.update(Message::DiagramNext);
+    model.diagram.load(ARTIFACT);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "files");
+    model.update(Message::DiagramParent);
+    assert_eq!(model.diagram.rows.len(), 1);
+    assert_eq!(model.diagram.selected_node().unwrap().id, "runs");
+}
+
+#[test]
+fn delivery_roles_request_before_and_after_diagrams() {
+    let planner = include_str!("../roles/planner.md");
+    let implementer = include_str!("../roles/implementer.md");
+    assert!(planner.contains("proposed"));
+    assert!(planner.contains("miau-graph"));
+    assert!(implementer.contains("observed"));
+    assert!(implementer.contains("miau-graph"));
+}
+
+#[test]
 fn diagram_reads_hierarchy_and_source_references_from_handoff() {
     let graph = parse(ARTIFACT).unwrap().unwrap();
     assert_eq!(graph.nodes[1].parent.as_deref(), Some("runs"));

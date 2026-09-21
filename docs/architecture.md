@@ -62,17 +62,22 @@ handoff, and effectful calls into the other contexts.
 
 Optional artifact diagrams use value types in `runs/domain/diagram` and a pure
 Handoff-fence parser and validator in `runs/application/diagram`. They are part
-of the canonical Markdown artifact and its existing version history, with no
-additional persisted state. Terminal application code owns hierarchy selection
+of the canonical Markdown artifact and its existing version history. Terminal application code owns hierarchy selection
 and the `SourceRepository` port; terminal infrastructure renders relationships,
 resolves source files within the project, and performs the editor handoff.
 Diagram reloads replace cached data, including clearing stale graphs on parse
 errors. Before opening a source, the artifact is reread and the selected node
-and reference are checked again. Diagram actions never invoke workflow decisions
-or agent execution. Observed diagrams require edge source references and are
+and reference are checked again. Diagram browsing and saving notes never invoke
+workflow decisions or agent execution; explicit note submission requests a revision. Observed diagrams require edge source references and are
 labelled extractor-reported when provenance is present, otherwise agent-reported.
 Parsing does not establish their factual correctness or authenticate metadata. See the
 [diagram guide](diagrams.md) for the schema, limits, and interaction model.
+
+Diagram notes live in the runs application layer and persist through `ArtifactRepository` as `diagram-notes-N.json`.
+They bind node IDs to the exact parsed graph snapshot, preserving previous notes while preventing reuse for changed
+relationships or evidence. Terminal application code owns pure drill-down navigation; infrastructure renders boxes and
+coordinates note editing and explicit submission. Submission rereads the artifact and uses the ordinary workflow
+revision/revisit path, preserving feedback before starting one agent and returning to the human gate afterward.
 
 The `runs/application/generate_diagram` use case accepts a `DiagramExtractor`
 port and validates its observed graph before returning a Markdown artifact.

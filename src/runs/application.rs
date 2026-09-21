@@ -1,6 +1,7 @@
 //! Persistence ports used by run and workflow use cases.
 
 pub mod diagram;
+pub mod diagram_notes;
 pub mod generate_diagram;
 
 use std::{

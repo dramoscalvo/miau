@@ -5,6 +5,33 @@ use std::fs;
 const DOCUMENT: &str = include_str!("../../../../tests/fixtures/diagram.md");
 
 #[test]
+fn diagram_shows_review_stage_boxes_and_saved_node_notes() {
+    let mut model = Model::default();
+    model.diagram.load(DOCUMENT);
+    model.update(Message::DiagramChild);
+    let graph = model.diagram.graph.as_ref().unwrap();
+    model
+        .diagram_notes
+        .set(graph, "port", "Keep the port small".into());
+    let mut terminal = Terminal::new(TestBackend::new(160, 35)).unwrap();
+    terminal
+        .draw(|frame| super::render(frame, frame.area(), &model, "plan"))
+        .unwrap();
+    let text: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(text.contains("Before implementation"));
+    assert!(text.contains("Keep the port small"));
+    assert!(text.contains("[note]"));
+    assert!(text.contains("╭──"));
+    assert!(text.contains("Runs"));
+}
+
+#[test]
 fn diagram_shows_extractor_provenance_and_coverage_warnings() {
     let metadata = r#""provenance":{"extractor":"miau-typescript","version":1,"typescript":"5.9.3","project":"tsconfig.json","scope":"module-dependencies","fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","warnings":["nonliteral import omitted"]},"#;
     let document = DOCUMENT

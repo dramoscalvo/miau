@@ -9,11 +9,34 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::Style,
+    text::Line,
     widgets::{Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 #[cfg(test)]
+mod notes_tests;
+#[cfg(test)]
 mod tests;
+
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+fn box_line(text: &str, width: usize) -> String {
+    let mut clipped = String::new();
+    let mut used = 0;
+    for ch in text.chars().filter(|ch| !ch.is_control()) {
+        let cells = ch.width().unwrap_or(0);
+        if used + cells > width {
+            break;
+        }
+        clipped.push(ch);
+        used += cells;
+    }
+    format!(
+        "│{}{}│",
+        clipped,
+        " ".repeat(width.saturating_sub(clipped.width()))
+    )
+}
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
     frame.render_widget(Clear, area);
@@ -33,9 +56,11 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
         return;
     };
     let status = match graph.status {
-        Status::Proposed => "Proposed",
-        Status::Observed if graph.provenance.is_some() => "Observed · extractor-reported",
-        Status::Observed => "Observed · agent-reported",
+        Status::Proposed => "Before implementation · Proposed",
+        Status::Observed if graph.provenance.is_some() => {
+            "Implementation snapshot · Observed · extractor-reported"
+        }
+        Status::Observed => "Implementation snapshot · Observed · agent-reported",
     };
     let title = format!(" Diagram · {step} · {status} · {} ", graph.title);
     let [header, content] =
@@ -47,7 +72,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
         });
     frame.render_widget(
         Paragraph::new(format!(
-            "{selected_source} · ] next source · o open · R reload"
+            "{selected_source} · ] source · o open · R reload · n note · S send notes"
         ))
         .block(pane::block(&title, focused)),
         header,
@@ -57,22 +82,47 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
     } else {
         Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(content)
     };
+    let box_width = usize::from(tree.width.saturating_sub(6));
     let items: Vec<_> = diagram
         .rows
         .iter()
-        .filter_map(|(index, depth)| {
+        .filter_map(|(index, _)| {
             graph.nodes.get(*index).map(|node| {
-                ListItem::new(format!("{}{}", "  ".repeat((*depth).min(12)), node.label))
+                let children = graph
+                    .nodes
+                    .iter()
+                    .filter(|child| child.parent.as_deref() == Some(&node.id))
+                    .count();
+                let note = if model.diagram_notes.note(graph, &node.id).trim().is_empty() {
+                    ""
+                } else {
+                    " [note]"
+                };
+                let kind = node.kind.map_or("Component", |kind| kind.label());
+                let hint = if children > 0 {
+                    format!("{kind} · {children} children{note}")
+                } else {
+                    format!("{kind}{note}")
+                };
+                ListItem::new(vec![
+                    Line::from(format!("╭{}╮", "─".repeat(box_width))),
+                    Line::from(box_line(&node.label, box_width)),
+                    Line::from(box_line(&hint, box_width)),
+                    Line::from(format!("╰{}╯", "─".repeat(box_width))),
+                ])
             })
         })
         .collect();
+    let scope = diagram
+        .scope
+        .as_ref()
+        .and_then(|id| graph.nodes.iter().find(|node| &node.id == id))
+        .map_or("Overview", |node| node.label.as_str());
+    let scope_title = format!(" {scope} · Enter in · Backspace out ");
     let mut state = ListState::default().with_selected(Some(diagram.selected));
     frame.render_stateful_widget(
         List::new(items)
-            .block(pane::block(
-                " Hierarchy · Enter child · Backspace parent ",
-                focused,
-            ))
+            .block(pane::block(&scope_title, focused))
             .highlight_symbol("> ")
             .highlight_style(Style::default().bold().cyan()),
         tree,
@@ -82,6 +132,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
         return;
     };
     let mut text = format!("{} [{}]\n", node.label, node.id);
+    let note = model.diagram_notes.note(graph, &node.id);
+    if !note.trim().is_empty() {
+        text.push_str(&format!(
+            "\nYour note (saved; S requests changes):\n{note}\n\n"
+        ));
+    }
     if let Some(kind) = node.kind {
         text.push_str(kind.label());
         text.push('\n');

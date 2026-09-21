@@ -106,7 +106,11 @@ exceeds the pane. Old or incomplete artifacts without a separate review section 
 directly between that document and Git changes, skipping the duplicate summary view. Editing still opens the single
 canonical artifact, and the preview reloads after the editor returns. The one-screen target is guidance, not a
 truncation or approval rule. Ordinary diagrams and Gherkin remain text, and scenarios are not automatically executed.
-An optional `miau-graph` block in Handoff adds the navigable [Diagram view](diagrams.md) after Git changes.
+The output contract requests a proposed UML for structural plans and an observed UML after implementation. A
+`miau-graph` block in Handoff adds the interactive [Diagram view](diagrams.md). Press `g` to open it directly;
+Left/Right browses the before/after workflow steps. Select boxes with `j`/`k`, drill in with Enter, and return with
+Backspace. Press `n` to save a note on an element, then `S` to submit all current diagram notes as Request changes.
+Saving notes does not start an agent or approve the step. Approval remains the explicit `a` action.
 
 For TypeScript projects, add a [diagram command step](configuration.md#add-a-typescript-diagram-step) to generate a
 compiler-resolved module dependency or semantic type snapshot without an agent. In Diagram, use `j`/`k` to select a

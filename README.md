@@ -58,7 +58,9 @@ declared operation dependencies. It does not infer runtime calls, ownership, agg
 injection, or architecture layers. The command creates a new file and refuses to overwrite one.
 
 Add it as an optional [workflow command step](docs/configuration.md#add-a-typescript-diagram-step) to review the result
-in miau. Press `v` to reach Diagram, browse the file hierarchy and relationships, and open cited sources in your editor.
+in miau. Press `g` to open Diagram, select boxes and drill into their children, and open cited sources in your editor.
+Planning and implementation reports request proposed and observed UMLs for structural changes. Browse their workflow
+steps with Left/Right to compare; use `n` to save notes on elements and `S` to request changes with those notes.
 Every workflow gate still waits for your decision. The [diagram guide](docs/diagrams.md) covers setup, reproducibility,
 controls, limitations, and the optional artifact format for proposed designs.
 

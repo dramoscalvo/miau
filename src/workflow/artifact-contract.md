@@ -22,9 +22,16 @@ choice, request that choice using the decision format below and reference the
 finding's severity/evidence in its context. Recommending an option for a question
 is allowed; approving or rejecting the workflow step belongs to the operator.
 
-When architecture relationships materially help review, you may include one
-JSON code fence tagged `miau-graph` inside Handoff. It is optional; do not add a
-diagram for routine changes. This creates miau's navigable Diagram view. Keep
+Before implementation, include a focused proposed design diagram when the change
+involves components, types, or their relationships. After implementation, include
+an observed diagram of the resulting code and explain deviations from the approved
+design in Review. Preserve the earlier planning artifact and reuse node IDs for
+the same entities across both stages. Critiques/reviews can reference these diagrams
+without duplicating them. For changes without meaningful structural relationships,
+explain why a diagram is not applicable instead of inventing structure.
+
+Include one JSON code fence tagged `miau-graph` inside Handoff per artifact.
+This creates miau's interactive Diagram view with selectable boxes and node notes. Keep
 the human explanation in Review and the complete graph in the same artifact.
 Use this version 1 format (replace the example with relevant project entities):
 
@@ -37,6 +44,9 @@ Use this version 1 format (replace the example with relevant project entities):
  "edges":[{"from":"files","to":"port","kind":"implements"}]}
 ```
 
+Group nodes using parents so the operator can drill into components. Human notes
+reference these stable node IDs; address submitted notes in the revised artifact.
+Browsing or saving notes is not approval; only explicit submission requests changes.
 Use stable, unique node IDs and real project-relative source paths with one-based
 line numbers. Nodes require `id` and `label`; `parent` and `source` are optional.
 Edges require `from`, `to`, and `kind`; `label` and `source` are optional. Allowed
@@ -63,7 +73,7 @@ compiler relationships manually. You may select the scope, invoke extraction,
 describe observed relationships, and interpret warnings. Report generation
 failures and missing tools instead of claiming an agent-authored graph was
 extracted. Put interpreted or redesigned architecture in a separate
-`status: "proposed"` graph.
+`status: "proposed"` diagram in a planning artifact.
 
 For every role and agent, put questions requiring human input in Review as
 second-level headings: `## D1: Question?`, `## D2: Question?`, and so on. Each

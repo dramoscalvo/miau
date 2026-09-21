@@ -17,6 +17,7 @@ pub enum Mode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptKind {
     Answer,
+    DiagramNote,
     Initial,
     Revision,
     Discussion,
@@ -141,6 +142,7 @@ impl Focus {
 #[derive(Debug, Clone)]
 pub struct Model {
     pub diagram: diagram::Diagram,
+    pub diagram_notes: crate::runs::application::diagram_notes::Notes,
     pub questions: Vec<Question>,
     pub decision_drafts: Drafts,
     pub decision_selected: usize,
@@ -169,6 +171,7 @@ impl Default for Model {
     fn default() -> Self {
         Self {
             diagram: diagram::Diagram::default(),
+            diagram_notes: Default::default(),
             questions: Vec::new(),
             decision_drafts: Drafts::default(),
             decision_selected: 0,
@@ -347,6 +350,17 @@ impl Model {
         }
     }
 
+    pub fn open_diagram_note(&mut self) {
+        let (Some(graph), Some(node)) = (&self.diagram.graph, self.diagram.selected_node()) else {
+            return;
+        };
+        let note = self.diagram_notes.note(graph, &node.id).to_owned();
+        self.open_prompt(PromptKind::DiagramNote);
+        self.prompt = note;
+        self.prompt_cursor = self.prompt.len();
+        self.prompt_edit_mode = PromptEditMode::Insert;
+    }
+
     pub fn open_answer(&mut self) {
         let Some(question) = self.questions.get(self.decision_selected) else {
             return;
@@ -360,6 +374,7 @@ impl Model {
 
     pub fn return_to_run_list(&mut self) {
         self.diagram = diagram::Diagram::default();
+        self.diagram_notes = Default::default();
         self.questions.clear();
         self.decision_drafts = Drafts::default();
         self.decision_error = None;
@@ -384,7 +399,7 @@ impl Model {
 
     pub fn open_prompt(&mut self, kind: PromptKind) {
         self.prompt = match kind {
-            PromptKind::Answer => String::new(),
+            PromptKind::Answer | PromptKind::DiagramNote => String::new(),
             PromptKind::Initial => self.pending_prompt.clone().unwrap_or_default(),
             PromptKind::Revision => String::new(),
             PromptKind::Discussion => "Update this step's artifact to incorporate the agreed changes from our interactive discussion. Read the current artifact from disk first. Apply any agreed implementation changes if this is an implementation step. If no changes were agreed, say so; do not invent decisions. Return the complete updated artifact for human review.".into(),
@@ -407,7 +422,10 @@ impl Model {
     }
 
     pub fn submit_prompt(&mut self) -> Option<SubmittedPrompt> {
-        if self.mode == Mode::Prompt(PromptKind::Answer) {
+        if matches!(
+            self.mode,
+            Mode::Prompt(PromptKind::Answer | PromptKind::DiagramNote)
+        ) {
             return None;
         }
         let Mode::Prompt(kind) = self.mode else {
@@ -419,7 +437,7 @@ impl Model {
         self.prompt_preferred_column = None;
         self.prompt_pending_command = None;
         let submission = match kind {
-            PromptKind::Answer => return None,
+            PromptKind::Answer | PromptKind::DiagramNote => return None,
             PromptKind::Initial => {
                 self.pending_prompt = (!prompt.is_empty()).then_some(prompt);
                 SubmittedPrompt::Initial

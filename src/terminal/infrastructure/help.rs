@@ -123,6 +123,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
             .map(Line::from)
             .collect::<Vec<_>>();
         let (title, instructions) = match (kind, prompt_edit_mode) {
+            (PromptKind::DiagramNote, PromptEditMode::Normal) => (
+                " Diagram note · saved draft · NORMAL ",
+                " i edit · Enter/Esc back · S sends notes from Diagram as Request changes ",
+            ),
+            (PromptKind::DiagramNote, PromptEditMode::Insert) => (
+                " Diagram note · saved draft · INSERT ",
+                " type to edit · Enter newline · Esc/Ctrl+C normal · S sends notes from Diagram ",
+            ),
             (PromptKind::Answer, PromptEditMode::Normal) => (
                 " Decision answer · saved draft · NORMAL ",
                 " i edit · o/O open line · Enter/Esc back to decisions · S submits from decisions ",
@@ -189,12 +197,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, view: HelpView<'_>) {
         if !matches!(mode, Mode::RunList | Mode::Confirm(_)) {
             let view_hints = match detail_view {
                 DetailView::Diagram => {
-                    "v next view · j/k nodes · Enter child · Backspace parent · ] source · o open · R reload · PgUp/PgDn details"
+                    "v next view · j/k boxes · Enter drill in · Backspace out · n note · S send notes · ] source · o open · R reload · PgUp/PgDn details"
                 }
                 DetailView::Decisions => {
                     "↑↓ decisions · Enter answer · S submit answers · v review · PgUp/PgDn scroll"
                 }
-                DetailView::Review if has_review => "v complete document · PgUp/PgDn summary",
+                DetailView::Review if has_review => {
+                    "g diagram · v complete document · PgUp/PgDn summary"
+                }
                 DetailView::Review => "v changes · PgUp/PgDn document",
                 DetailView::Artifact => "v changes · PgUp/PgDn document",
                 DetailView::Changes => "v next view · j/k files · PgUp/PgDn diff",

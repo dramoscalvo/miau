@@ -2,10 +2,21 @@
 
 [Back to usage](usage.md)
 
-An artifact can include one optional `miau-graph` JSON fence in its `# Handoff` section. When present, press `v` to
-reach Diagram after Git changes. The view shows a hierarchy and the selected node's incoming and outgoing
-relationships. TypeScript module dependencies and semantic type relationships can be extracted with the deterministic
-command below. Graphical arrow layout and metrics overlays are not included yet.
+Planning and implementation reports provide two review points: a **Proposed** UML before implementation, and an
+**Observed** snapshot of the resulting implementation. The shared output contract and bundled roles request these
+for structural changes, with stable entity IDs across stages and an explanation of deviations in the implementation
+report. For changes without meaningful structural relationships, agents explain why a diagram is not applicable.
+These are agent instructions, not an automatic completeness check or approval rule.
+
+Press `g` to open Diagram directly, or `v` to reach it after Git changes. Select component/type boxes, drill into their
+children, inspect relationships, and save notes on individual elements. Left/Right browses workflow steps while keeping
+Diagram open and retaining the selected entity when its ID exists in the other snapshot. Review the planning diagram
+before approving implementation, then inspect the implementation diagram before approving the result. Each diagram
+stays in its own versioned artifact; comparison is by browsing steps, not a side-by-side diff.
+
+An artifact carries one `miau-graph` JSON fence in its `# Handoff` section. TypeScript module dependencies and semantic
+type relationships can also be extracted with the deterministic command below. Interaction uses the keyboard; freeform
+canvas positioning, connected-arrow layout, mouse box selection, and metrics overlays are not included.
 
 ## Deterministic TypeScript extraction
 
@@ -122,21 +133,38 @@ and repeatability tests. An agent's prose or proposed design has no determinism 
 
 ## Reviewing diagrams
 
-The active agent can produce a diagram as part of its ordinary report. Ask for a relevant architecture diagram in
-the initial prompt or Request changes. Regeneration uses the existing human-submitted revision flow. Browsing,
-reloading, and opening sources never approve a step, create feedback, or start an agent.
+The active agent produces diagrams as part of its ordinary report. Request missing or updated diagrams through the
+initial prompt or Request changes. Regeneration uses the existing human-submitted revision flow. Browsing, reloading,
+opening sources, and saving notes never approve a step or start an agent.
 
 | Key | Action |
 | --- | --- |
-| Up/Down or `k`/`j` | Select a node in the expanded hierarchy. |
-| Enter | Select its first child, if any. |
-| Backspace | Select its parent. |
+| `g` | Open Diagram directly from another artifact view. |
+| Up/Down or `k`/`j` | Select a box at the current hierarchy level. |
+| Enter | Drill into the selected box, showing its children. |
+| Backspace | Return to the parent level, selecting the container. |
 | Page Up/Page Down | Scroll the selected node's relationship details. |
 | `]` | Cycle through its source reference and the sources cited by its relationships. |
 | `o` | Open the selected source file in `$EDITOR` (default `vi`) while no process is active. |
 | `R` | Reload the diagram from the artifact on disk. |
-| Left/Right | Browse workflow steps. |
+| Left/Right | Browse before/after workflow steps, retaining the selected entity when possible. |
+| `n` | Add or edit a saved note on the selected node of an agent step. |
+| `S` | Submit current diagram notes as Request changes; return to human review after the agent finishes. |
 | `v` | Continue cycling through the artifact views. |
+
+Notes use the existing multiline editor: type to edit, Enter inserts a newline, Esc returns to normal mode, then
+Enter/Esc returns to Diagram. Edits save as you type. A `[note]` marker identifies annotated boxes; the selected note
+appears above its relationships. Clear the text to remove a note from submission. `S` explicitly sends all nonblank
+notes for the current graph through the existing revision/revisit flow. It does not approve the step. The ordinary
+`a` approval action remains separate. Notes are available while no process is active on a completed/failed agent step;
+command steps cannot receive agent revisions.
+
+Notes persist in `diagram-notes-N.json`, scoped to the run, step, and exact parsed graph snapshot. Changing graph
+structure, labels, evidence, or metadata creates a distinct snapshot: old notes remain on disk but are not reused or
+submitted for the changed graph. Review and re-enter applicable feedback after a change. Returning to the original
+graph restores its notes. Prose-only edits do not invalidate diagram notes. Opening a note or submitting notes rereads
+the artifact; a changed graph requires reviewing the updated view first. Submitted notes are preserved in the ordinary
+versioned feedback file before the agent starts.
 
 Tab still changes focus to Activity, where the usual scrolling controls apply. Source references show a path and
 one-based line number in the diagram header. The editor receives the absolute file path as one argument, without
@@ -195,7 +223,7 @@ the extraction rules. Provenance scope is `module-dependencies` for module scope
 Nodes require nonblank `id` and `label` strings; optional `parent` references another node's ID. Version 2 also accepts
 an optional semantic `kind`: `directory`, `module`, `class`, `abstract-class`, `interface`, `enum`, or `external`.
 Unknown kinds are rejected. Version 1 artifacts remain valid. IDs must be unique and should remain stable across
-revisions. Roots and siblings display in document order, with all children visible.
+revisions. Roots and siblings display in document order; Enter reveals a selected node's children.
 The optional node `source` has `file` and `line`. Paths use `/`, are relative to the project, and cannot contain
 `.` or `..` segments, backslashes, colons, or control characters. Lines must be positive integers.
 

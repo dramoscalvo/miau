@@ -17,7 +17,7 @@ use crate::{
         infrastructure::{ConfiguredAdapter, RunningAgent, ShellAdapter, spawn},
     },
     runs::{
-        application::{ArtifactRepository, RunRepository},
+        application::{ArtifactRepository, RunRepository, diagram_notes::Notes},
         domain::{Decision, Node, NodeStatus, Run},
         infrastructure::FileRepository,
     },
@@ -366,6 +366,27 @@ impl App {
         Ok(())
     }
 
+    fn browse_node(&mut self, forward: bool) -> Result<()> {
+        let diagram = self.ui.detail_view == DetailView::Diagram;
+        if forward {
+            let last = self
+                .run
+                .as_ref()
+                .map_or(0, |run| run.nodes.len().saturating_sub(1));
+            self.ui.update(Message::ViewNextNode { last });
+        } else {
+            self.ui.update(Message::ViewPreviousNode);
+        }
+        if !diagram {
+            self.ui.diagram = Default::default();
+        }
+        self.reload_artifact()?;
+        if diagram {
+            self.ui.detail_view = DetailView::Diagram;
+        }
+        Ok(())
+    }
+
     fn reload_artifact(&mut self) -> Result<()> {
         self.artifact = match self.run.as_ref() {
             Some(run) => match run.nodes.get(self.ui.viewed_node) {
@@ -376,6 +397,10 @@ impl App {
         };
         self.ui.load_decisions(&self.artifact);
         self.ui.diagram.load(&self.artifact);
+        self.ui.diagram_notes = match self.run.as_ref() {
+            Some(run) => Notes::load(&self.repository, &run.id, self.ui.viewed_node)?,
+            None => Notes::default(),
+        };
         self.ui.decision_drafts = match self.run.as_ref() {
             Some(run) => Drafts::load(&self.repository, &run.id, self.ui.viewed_node)?,
             None => Drafts::default(),
@@ -384,6 +409,19 @@ impl App {
     }
 
     fn save_answer(&mut self) -> Result<()> {
+        if self.ui.mode == Mode::Prompt(PromptKind::DiagramNote) {
+            if let (Some(graph), Some(node), Some(run)) = (
+                &self.ui.diagram.graph,
+                self.ui.diagram.selected_node(),
+                &self.run,
+            ) {
+                let mut notes = self.ui.diagram_notes.clone();
+                notes.set(graph, &node.id, self.ui.prompt.clone());
+                notes.save(&self.repository, &run.id, self.ui.viewed_node)?;
+                self.ui.diagram_notes = notes;
+            }
+            return Ok(());
+        }
         if self.ui.mode != Mode::Prompt(PromptKind::Answer) {
             return Ok(());
         }
@@ -398,6 +436,61 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    fn open_diagram_note(&mut self) -> Result<()> {
+        let previous = self.ui.diagram.graph.clone();
+        let selected = self.ui.diagram.selected_node().map(|node| node.id.clone());
+        self.reload_artifact()?;
+        self.ui.detail_view = DetailView::Diagram;
+        if self.ui.diagram.graph != previous
+            || self.ui.diagram.selected_node().map(|node| &node.id) != selected.as_ref()
+        {
+            self.ui.error = Some("Diagram changed on disk. Review it before adding notes.".into());
+            return Ok(());
+        }
+        self.ui.open_diagram_note();
+        Ok(())
+    }
+
+    fn diagram_feedback(&mut self) -> Result<Option<String>> {
+        let previous = self.ui.diagram.graph.clone();
+        self.reload_artifact()?;
+        self.ui.detail_view = DetailView::Diagram;
+        if self.ui.diagram.graph != previous {
+            self.ui.error = Some("Diagram changed on disk. Review it before submitting notes; previous notes remain saved.".into());
+            return Ok(None);
+        }
+        let feedback = self
+            .ui
+            .diagram
+            .graph
+            .as_ref()
+            .and_then(|graph| self.ui.diagram_notes.feedback(graph));
+        if feedback.is_none() {
+            self.ui.error = Some("Add a note with n before submitting.".into());
+        }
+        Ok(feedback)
+    }
+
+    async fn submit_diagram_notes(&mut self) -> Result<()> {
+        if self.running.is_some()
+            || !self.prompt_ready()
+            || self.selected_prompt_kind() != Some(PromptKind::Revision)
+        {
+            return Ok(());
+        }
+        let Some(note) = self.diagram_feedback()? else {
+            return Ok(());
+        };
+        if let Some(run) = self.run.as_mut() {
+            self.ui.pending_prompt = if self.ui.viewed_node == run.cursor {
+                self.orchestrator.decide(run, Decision::Revise { note })?
+            } else {
+                Some(self.orchestrator.revisit(run, self.ui.viewed_node, note)?)
+            };
+        }
+        self.start_current().await
     }
 
     async fn submit_answers(&mut self) -> Result<()> {
@@ -664,7 +757,10 @@ impl App {
             }
             Mode::Prompt(_) => {
                 let prompt_width = terminal.size()?.width.saturating_sub(2).max(1) as usize;
-                let answering = self.ui.mode == Mode::Prompt(PromptKind::Answer);
+                let answering = matches!(
+                    self.ui.mode,
+                    Mode::Prompt(PromptKind::Answer | PromptKind::DiagramNote)
+                );
                 if answering && code == KeyCode::Enter {
                     if self.ui.prompt_edit_mode == PromptEditMode::Insert {
                         self.ui.update(Message::Input('\n'));
@@ -749,21 +845,28 @@ impl App {
                 });
                 self.refresh_working_tree_if_visible();
             }
-            KeyCode::Left => {
-                self.ui.update(Message::ViewPreviousNode);
-                self.ui.diagram = Default::default();
-                self.reload_artifact()?;
-            }
-            KeyCode::Right => {
-                let last = self
-                    .run
-                    .as_ref()
-                    .map_or(0, |run| run.nodes.len().saturating_sub(1));
-                self.ui.update(Message::ViewNextNode { last });
-                self.ui.diagram = Default::default();
-                self.reload_artifact()?;
-            }
+            KeyCode::Left => self.browse_node(false)?,
+            KeyCode::Right => self.browse_node(true)?,
             KeyCode::Tab => self.ui.update(Message::ToggleFocus),
+            KeyCode::Char('g') => {
+                self.reload_artifact()?;
+                self.ui.detail_view = DetailView::Diagram;
+                self.ui.focus = crate::terminal::application::Focus::Flow;
+            }
+            KeyCode::Char('n')
+                if self.ui.detail_view == DetailView::Diagram
+                    && self.ui.focus == crate::terminal::application::Focus::Flow
+                    && self.prompt_ready()
+                    && self.running.is_none() =>
+            {
+                self.open_diagram_note()?;
+            }
+            KeyCode::Char('S')
+                if self.ui.detail_view == DetailView::Diagram
+                    && self.ui.focus == crate::terminal::application::Focus::Flow =>
+            {
+                self.submit_diagram_notes().await?;
+            }
             KeyCode::Char('R') if self.ui.detail_view == DetailView::Diagram => {
                 self.reload_artifact()?;
                 self.ui.detail_view = DetailView::Diagram;

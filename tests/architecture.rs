@@ -9,6 +9,7 @@ fn inner_layers_do_not_depend_on_infrastructure() {
     let inner_layers = [
         source.join("runs/application.rs"),
         source.join("runs/application/diagram.rs"),
+        source.join("runs/application/diagram_notes.rs"),
         source.join("runs/application/generate_diagram.rs"),
         source.join("runs/domain.rs"),
         source.join("runs/domain/diagram.rs"),

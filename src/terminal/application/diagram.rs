@@ -18,9 +18,10 @@ pub trait SourceRepository {
 pub struct Diagram {
     pub graph: Option<Graph>,
     pub error: Option<String>,
-    /// Node index and hierarchy depth in display order.
+    /// Node index and depth at the current drill-down level.
     pub rows: Vec<(usize, usize)>,
     pub selected: usize,
+    pub scope: Option<String>,
     pub source_selected: usize,
 }
 
@@ -31,34 +32,15 @@ impl Diagram {
         *self = Self::default();
         match parse(artifact) {
             Ok(Some(graph)) => {
-                let mut stack: Vec<_> = graph
-                    .nodes
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .filter(|(_, node)| node.parent.is_none())
-                    .map(|(index, _)| (index, 0))
-                    .collect();
-                while let Some((index, depth)) = stack.pop() {
-                    self.rows.push((index, depth));
-                    stack.extend(
-                        graph
-                            .nodes
-                            .iter()
-                            .enumerate()
-                            .rev()
-                            .filter(|(_, node)| {
-                                node.parent.as_deref() == Some(&graph.nodes[index].id)
-                            })
-                            .map(|(index, _)| (index, depth + 1)),
-                    );
-                }
-                self.selected = self
-                    .rows
-                    .iter()
-                    .position(|(index, _)| Some(&graph.nodes[*index].id) == selected.as_ref())
-                    .unwrap_or(0);
+                self.scope = selected.as_ref().and_then(|id| {
+                    graph
+                        .nodes
+                        .iter()
+                        .find(|node| &node.id == id)
+                        .and_then(|node| node.parent.clone())
+                });
                 self.graph = Some(graph);
+                self.rebuild_rows(selected.as_deref());
                 self.source_selected = self
                     .sources()
                     .iter()
@@ -114,29 +96,50 @@ impl Diagram {
         self.source_selected = 0;
     }
 
+    fn rebuild_rows(&mut self, selected: Option<&str>) {
+        let Some(graph) = &self.graph else { return };
+        self.rows = graph
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.parent == self.scope)
+            .map(|(index, _)| (index, 0))
+            .collect();
+        self.selected = self
+            .rows
+            .iter()
+            .position(|(index, _)| Some(graph.nodes[*index].id.as_str()) == selected)
+            .unwrap_or(0);
+        self.source_selected = 0;
+    }
+
     pub fn child(&mut self) {
-        if let (Some((_, depth)), Some((_, next_depth))) = (
-            self.rows.get(self.selected),
-            self.rows.get(self.selected + 1),
-        ) && next_depth > depth
+        let Some(node) = self.selected_node() else {
+            return;
+        };
+        let Some(graph) = &self.graph else { return };
+        if graph
+            .nodes
+            .iter()
+            .any(|child| child.parent.as_deref() == Some(&node.id))
         {
-            self.move_selection(true);
+            self.scope = Some(node.id.clone());
+            self.rebuild_rows(None);
         }
     }
 
     pub fn parent(&mut self) {
-        let Some(parent) = self.selected_node().and_then(|node| node.parent.as_deref()) else {
+        let Some(parent) = self.scope.clone() else {
             return;
         };
-        let Some(graph) = &self.graph else { return };
-        if let Some(index) = self
-            .rows
-            .iter()
-            .position(|(index, _)| graph.nodes[*index].id == parent)
-        {
-            self.selected = index;
-            self.source_selected = 0;
-        }
+        self.scope = self.graph.as_ref().and_then(|graph| {
+            graph
+                .nodes
+                .iter()
+                .find(|node| node.id == parent)
+                .and_then(|node| node.parent.clone())
+        });
+        self.rebuild_rows(Some(&parent));
     }
 
     pub fn next_source(&mut self) {
