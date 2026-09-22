@@ -80,8 +80,6 @@ impl Diagram {
         let count = self.relations().len();
         if count > 0 {
             self.relation_selected = (self.relation_selected + 1) % count;
-            self.pan_x = 0;
-            self.pan_y = 0;
         }
     }
 
@@ -93,8 +91,10 @@ impl Diagram {
     fn reset_view(&mut self) {
         self.source_selected = 0;
         self.relation_selected = 0;
-        self.pan_x = 0;
-        self.pan_y = 0;
+        if !self.is_uml() {
+            self.pan_x = 0;
+            self.pan_y = 0;
+        }
     }
 
     pub fn available(&self) -> bool {

@@ -160,8 +160,9 @@ leaves the workflow gate unchanged. The resumed session supplies discussion
 context, without transcript forwarding. Disk edits made during the interactive
 session remain canonical even when the update request is cancelled.
 
-The UML class renderer reads version 2 classifier members from the artifact and draws a bounded neighborhood with
+The UML class renderer reads version 2 classifier members from the artifact and draws the whole graph with
 UML connectors. Class selection, relationship traversal, history, and pan state belong to the terminal application
-layer; terminal geometry and drawing belong to infrastructure. Planning and implementation prompts request the same
-class model format and stable IDs. Legacy untyped graphs retain the hierarchy renderer. Member changes alter the
-graph snapshot identity used for notes, so old notes cannot silently attach to a changed class model.
+layer; terminal geometry and drawing belong to infrastructure. A stable two-column canvas contains each classifier
+once, including disconnected types; selection highlights relationships without filtering the graph. UML is requested
+only after implementation, with stable IDs across revisions. Legacy untyped graphs retain the hierarchy renderer.
+Member changes alter the graph snapshot identity used for notes, so old notes cannot silently attach to a changed model.

@@ -1,5 +1,6 @@
-Return one compact Markdown artifact, starting with exactly `# Review`, followed
+Return one Markdown artifact, starting with exactly `# Review`, followed later
 by exactly `# Handoff` on its own line. Use these sections even with a custom role.
+Do not prepend YAML frontmatter; run metadata is already persisted by miau.
 
 Hard-wrap Markdown prose with actual newline characters at word boundaries,
 aiming for 120 characters per line and keeping lines within 150 characters where
@@ -7,42 +8,75 @@ practical. Preserve paragraph breaks and list indentation. Do not insert breaks
 inside code blocks, tables, URLs, paths, or other indivisible tokens when doing
 so would damage their meaning or Markdown syntax.
 
-In Review, aim for 24 short lines (roughly one screen). Put the goal and human
-decisions/risks first; never hide a blocking issue to meet the length target.
-Show a compact file tree marked A/M/D/R with one-line purposes, labelled Proposed
-before implementation or Observed after inspection. Distinguish pre-existing
-changes; do not infer ownership from Git status alone. Include a few short
-Given/When/Then acceptance scenarios with stable IDs, or reference existing IDs
-when unchanged. Report verification as passed, failed, or not run, with commands
-and evidence references. Scenarios alone are not executed tests. Include a small
-text diagram only when relationships or execution order need explaining.
-For critique/review, prioritize findings with severity and evidence over repeating
-the plan. Human decisions remain with the operator. If a finding needs a human
-choice, request that choice using the decision format below and reference the
-finding's severity/evidence in its context. Recommending an option for a question
-is allowed; approving or rejecting the workflow step belongs to the operator.
+Write a concrete feature document, with enough detail to implement and review the behavior.
+Use plain prose, specific rules, and meaningful examples. Do not compress the document to
+one screen or pad it with generic advice, discovery narratives, or repeated information.
 
-Before implementation, include a focused proposed UML class diagram when the change
-involves types or their relationships. After implementation, include an observed UML
+For planning, put the feature title in a short opening line in Review, then use these
+second-level sections in order:
+
+- `## Objective`: one paragraph describing the externally observable outcome that defines done.
+- `## Scope`: explicit **In scope:** and **Out of scope:** lists.
+- `## Behavior`: feature-specific rules, grouped under descriptive third-level headings.
+  Describe orchestration, concrete values, mappings, validation, errors, and non-obvious
+  design decisions. Explain failure and partial-success behavior where relevant. Do not
+  repeat repository conventions, method signatures, or contracts already available by reference.
+- `## Tests`: group scenarios under `### Unit tests`, `### Integration tests`, and
+  `### E2E tests`. Give each scenario a stable ID and a descriptive name, followed by
+  Given/When/Then bullets. Cover relevant success, failure, and boundary behavior. For
+  an inapplicable test level, say None and explain why; do not invent work to fill it.
+  Planned scenarios are not executed tests.
+- `## Assumptions`: only design assumptions that affect implementation, without repeating
+  scope. Surface unresolved product choices as human decisions instead of assuming answers.
+- `## References`: actual related artifact paths, code paths/symbols, and existing diagrams
+  or contracts. Do not invent references or duplicate their contents.
+
+After implementation, use the same feature sections in Review to describe the delivered
+behavior, and append `## Implemented plan`: what shipped, important design decisions and
+reasons, deviations from the approved plan, files created/changed/deleted, and verification
+commands with passed, failed, or not run outcomes and evidence. Distinguish pre-existing
+changes; do not infer ownership from Git status alone. Preserve acceptance IDs across
+revisions. Keep the approved upstream planning artifact intact; write the delivered feature
+in this step's output. Do not include Implemented plan in a planning artifact or claim
+unimplemented behavior shipped. The delivered document should stand on its own without
+copying unrelated upstream detail. A file list with short purposes is sufficient; no
+mandatory A/M/D/R tree.
+
+For critique/review, use `## Findings`, `## Verification`, and `## References` in Review
+instead of rewriting the feature. Prioritize discrepancies and risks with severity,
+concrete evidence, and affected behavior or acceptance IDs. State when no findings exist,
+what was inspected, and any verification limitations. Custom roles should use the feature
+structure when specifying or delivering behavior, or the findings structure when assessing it.
+
+Human decisions remain with the operator. Put any required decisions directly in Review
+using the decision format below, before the feature sections or findings so blockers are
+visible first. Reference the finding's severity/evidence in the decision context when
+applicable. Recommending an option is allowed; approving or rejecting the workflow step
+belongs to the operator.
+
+Do not generate UML during planning or pre-implementation critique. Describe intended
+relationships in prose. After implementation, include an observed UML
 class diagram of the resulting code and explain deviations from the approved design
-in Review. Preserve the planning artifact and reuse node IDs for the same types
-across both stages. Critiques/reviews can reference these diagrams without duplicating
+in Review. Cover the whole change, including disconnected affected types and their
+relationships, in one graph. Reuse node IDs for the same types across revisions.
+Critiques/reviews can reference existing diagrams without duplicating
 them. For changes without meaningful class/type relationships, explain why a class
 diagram is not applicable instead of inventing classes for files or functions.
 
-Include one JSON code fence tagged `miau-graph` inside Handoff per artifact.
+For the post-implementation diagram, include one JSON code fence tagged `miau-graph` inside Handoff.
 This creates miau's navigable UML class view with connected arrows, member compartments,
 and notes on individual classes. Keep the human explanation in Review and the complete
 graph in the same artifact. Use version 2 and explicit classifier kinds. A directory
 or module dependency graph does not satisfy the class diagram requirement.
 
 ```miau-graph
-{"version":2,"title":"Storage classes","status":"proposed",
+{"version":2,"title":"Storage classes","status":"observed",
  "nodes":[{"id":"port","label":"Repository","kind":"interface",
            "attributes":[],"operations":["+ save(artifact: Artifact): Result"]},
           {"id":"files","label":"FileRepository","kind":"class",
            "attributes":["- root: Path"],"operations":["+ save(artifact: Artifact): Result"]}],
- "edges":[{"from":"files","to":"port","kind":"implements"}]}
+ "edges":[{"from":"files","to":"port","kind":"implements",
+           "source":{"file":"src/storage.rs","line":12}}]}
 ```
 
 Show the relevant classes, abstract classes, interfaces, and enums using `kind` values
@@ -55,9 +89,9 @@ literals. Keep members focused on the change; disclose omitted members in Review
 An empty array means no members in that compartment; omit a field only when members
 are unknown, in which case the viewer labels it not recorded. Do not invent members.
 
-Use stable, unique type IDs across planning, revisions, and implementation. For TypeScript,
-use the extractor's canonical `type:<project-relative-path>#<declared-name>` IDs in the
-plan too (for example, `type:src/storage.ts#Repository`). Explain identity changes when
+Use stable, unique type IDs across implementation revisions. For TypeScript,
+use the extractor's canonical `type:<project-relative-path>#<declared-name>` IDs
+(for example, `type:src/storage.ts#Repository`). Explain identity changes when
 moving or renaming a declaration. Human notes
 reference these IDs; address submitted notes in the revised artifact. Browsing or saving
 notes is not approval; only explicit submission requests changes. Optional `parent`
@@ -75,8 +109,8 @@ or dashed connectors from these kinds. Endpoints and parents must reference exis
 IDs; hierarchy cycles are invalid, while relationship cycles and self-links are allowed.
 
 Required graph fields are `version`, `title`, `status`, `nodes`, and `edges`; extra
-fields are rejected. Use `status: "proposed"` for the plan, or `status: "observed"`
-for the implementation you inspected. Every observed edge must cite a supporting
+fields are rejected. Use `status: "observed"` for the implementation you inspected.
+Every observed edge must cite a supporting
 source reference. Never present proposed structure as observed or invent evidence.
 Agent-authored diagrams are reported context, not independent verification or approval.
 Limit the graph to the relevant types (at most 1000 nodes, 5000 edges, and 1 MiB of JSON).
@@ -92,7 +126,7 @@ member signatures. Report unavailable tools or generation failures honestly. For
 other languages, inspect source and supply an agent-reported observed class diagram
 with evidence. Put intended designs in the separate proposed planning artifact.
 Module scope (`--scope modules`, the command default) is useful for import dependencies
-but does not substitute for the planning/implementation class diagram.
+but does not substitute for the post-implementation class diagram.
 
 For every role and agent, put questions requiring human input in Review as
 second-level headings: `## D1: Question?`, `## D2: Question?`, and so on. Each
@@ -106,7 +140,7 @@ After receiving human answers, incorporate them in the updated artifact, mark
 answered decisions `Status: Resolved`, and record `Answer: ...`. Keep unanswered
 decisions `Status: Open`; partial answers do not authorize guessing the rest.
 Do not invent questions when no human input is needed. Answer submission is not
-workflow approval. These decision details may exceed the Review length target.
+workflow approval. Include enough decision detail for the operator to answer confidently.
 
 This is miau's human-feedback interface for every role, including custom roles,
 on both initial and resumed runs. Questions in prose, lists, tables, Handoff,

@@ -230,10 +230,10 @@ fn uml_renders_compartments_and_connected_realization_arrow() {
 }
 
 #[test]
-fn uml_relationship_navigation_brings_later_neighbors_into_view() {
+fn uml_shows_entire_graph_including_disconnected_classes_without_navigation() {
     let graph = serde_json::json!({
         "version": 2, "title": "Related classes", "status": "proposed",
-        "nodes": (0..6).map(|index| serde_json::json!({
+        "nodes": (0..7).map(|index| serde_json::json!({
             "id": format!("c{index}"), "label": format!("Class{index}"), "kind": "class",
             "attributes": [], "operations": []
         })).collect::<Vec<_>>(),
@@ -245,10 +245,7 @@ fn uml_relationship_navigation_brings_later_neighbors_into_view() {
     model
         .diagram
         .load(&format!("# Handoff\n```miau-graph\n{graph}\n```\n"));
-    for _ in 0..4 {
-        model.update(Message::DiagramNextRelation);
-    }
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(180, 80)).unwrap();
     terminal
         .draw(|frame| super::render(frame, frame.area(), &model, "implementation"))
         .unwrap();
@@ -259,10 +256,47 @@ fn uml_relationship_navigation_brings_later_neighbors_into_view() {
         .iter()
         .map(|cell| cell.symbol())
         .collect();
-    assert!(text.contains("Class5"));
+    for index in 0..7 {
+        assert!(
+            text.contains(&format!("Class{index}")),
+            "missing Class{index}"
+        );
+    }
+    assert!(text.contains("Whole change"));
+    let class_positions = |terminal: &Terminal<TestBackend>| {
+        let buffer = terminal.backend().buffer();
+        (0..7)
+            .map(|index| {
+                (5..70)
+                    .find_map(|y| {
+                        let line: String = (0..180).map(|x| buffer[(x, y)].symbol()).collect();
+                        line.find(&format!("Class{index}")).map(|x| (x, y))
+                    })
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
+    };
+    let positions = class_positions(&terminal);
+    for _ in 0..4 {
+        model.update(Message::DiagramNextRelation);
+    }
+    terminal
+        .draw(|frame| super::render(frame, frame.area(), &model, "implementation"))
+        .unwrap();
+    let text: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
     assert!(text.contains("relationship 5/5"));
     model.update(Message::DiagramChild);
     assert_eq!(model.diagram.selected_node().unwrap().id, "c5");
+    terminal
+        .draw(|frame| super::render(frame, frame.area(), &model, "implementation"))
+        .unwrap();
+    assert_eq!(positions, class_positions(&terminal));
     model.update(Message::DiagramParent);
     assert_eq!(model.diagram.selected_node().unwrap().id, "c0");
 }

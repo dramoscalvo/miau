@@ -19,11 +19,11 @@ fn diagram_drills_into_one_level_and_returns_to_its_container() {
 }
 
 #[test]
-fn delivery_roles_request_before_and_after_diagrams() {
+fn delivery_roles_request_diagrams_only_after_implementation() {
     let planner = include_str!("../roles/planner.md");
     let implementer = include_str!("../roles/implementer.md");
-    assert!(planner.contains("proposed"));
-    assert!(planner.contains("miau-graph"));
+    assert!(planner.contains("Do not generate UML during planning"));
+    assert!(!planner.contains("miau-graph"));
     assert!(implementer.contains("observed"));
     assert!(implementer.contains("miau-graph"));
 }
@@ -241,12 +241,10 @@ fn shared_workflow_contract_example_is_a_navigable_uml_class_model() {
             assert!(node.operations.is_some());
         }
     }
-    for role in [
-        include_str!("../roles/planner.md"),
-        include_str!("../roles/implementer.md"),
-    ] {
-        assert!(role.contains("class diagram"));
-    }
+    assert!(include_str!("../roles/implementer.md").contains("class diagram"));
+    assert!(include_str!("../roles/planner.md").contains("Do not generate UML"));
+    assert!(contract.contains("Do not generate UML during planning"));
+    assert!(!contract.contains("status: \"proposed\"` for the plan"));
 }
 
 #[test]
@@ -279,6 +277,21 @@ fn uml_relationship_selection_pan_and_step_comparison_preserve_human_gate() {
     );
     assert_eq!(model.mode, Mode::Gate);
     assert!(model.pending_prompt.is_none());
+}
+
+#[test]
+fn uml_selection_preserves_the_whole_canvas_viewport() {
+    let mut model = Model::default();
+    model.diagram.load(&uml_artifact());
+    model.update(Message::DiagramPan { x: 8, y: 20 });
+    model.update(Message::DiagramNextRelation);
+    assert_eq!((model.diagram.pan_x, model.diagram.pan_y), (8, 20));
+    model.update(Message::DiagramChild);
+    assert_eq!((model.diagram.pan_x, model.diagram.pan_y), (8, 20));
+    model.update(Message::DiagramNext);
+    assert_eq!((model.diagram.pan_x, model.diagram.pan_y), (8, 20));
+    model.update(Message::DiagramParent);
+    assert_eq!((model.diagram.pan_x, model.diagram.pan_y), (8, 20));
 }
 
 #[test]

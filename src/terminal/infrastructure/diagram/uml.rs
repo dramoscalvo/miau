@@ -1,4 +1,4 @@
-//! A navigable UML neighborhood. Layout is bounded even for very large artifacts.
+//! A stable whole-graph UML canvas; selection highlights without filtering the graph.
 use super::super::pane;
 use crate::{
     runs::domain::diagram::{EdgeKind, Node, NodeKind, Status},
@@ -13,12 +13,12 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-const PAGE: usize = 4;
 const GAP: usize = 26;
 
 struct Stroke {
     x: usize,
     y: usize,
+    end_y: usize,
     text: String,
     style: Style,
 }
@@ -29,10 +29,20 @@ struct Canvas {
 }
 
 impl Canvas {
+    fn vertical(&mut self, x: usize, start: usize, end: usize, line: char, style: Style) {
+        self.strokes.push(Stroke {
+            x,
+            y: start.min(end),
+            end_y: start.max(end),
+            text: if line == '╌' { "╎" } else { "│" }.into(),
+            style,
+        });
+    }
     fn text(&mut self, x: usize, y: usize, text: impl Into<String>, style: Style) {
         self.strokes.push(Stroke {
             x,
             y,
+            end_y: y,
             text: text.into(),
             style,
         });
@@ -92,22 +102,26 @@ impl Canvas {
     fn paint(&self, frame: &mut Frame<'_>, area: Rect, pan_x: usize, pan_y: usize) {
         let buffer = frame.buffer_mut();
         for stroke in &self.strokes {
-            if stroke.y < pan_y || stroke.y - pan_y >= usize::from(area.height) {
-                continue;
-            }
-            let mut x = stroke.x;
-            let span = Span::raw(stroke.text.as_str());
-            for grapheme in span.styled_graphemes(stroke.style) {
-                let width = grapheme.symbol.width();
-                if width > 0 && x >= pan_x && x - pan_x + width <= usize::from(area.width) {
-                    buffer.set_string(
-                        area.x + (x - pan_x) as u16,
-                        area.y + (stroke.y - pan_y) as u16,
-                        grapheme.symbol,
-                        grapheme.style,
-                    );
+            // Clip long connectors before painting; large graphs must not allocate per cell.
+            let visible_end = stroke
+                .end_y
+                .saturating_add(1)
+                .min(pan_y.saturating_add(usize::from(area.height)));
+            for y in stroke.y.max(pan_y)..visible_end {
+                let mut x = stroke.x;
+                let span = Span::raw(stroke.text.as_str());
+                for grapheme in span.styled_graphemes(stroke.style) {
+                    let width = grapheme.symbol.width();
+                    if width > 0 && x >= pan_x && x - pan_x + width <= usize::from(area.width) {
+                        buffer.set_string(
+                            area.x + (x - pan_x) as u16,
+                            area.y + (y - pan_y) as u16,
+                            grapheme.symbol,
+                            grapheme.style,
+                        );
+                    }
+                    x += width;
                 }
-                x += width;
             }
         }
     }
@@ -163,7 +177,6 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
     ])
     .areas(area);
     let relations = diagram.relations();
-    let page = diagram.relation_selected;
     let title = format!(" UML classes · {step} · {stage} · {} ", graph.title);
     let controls = format!(
         "↑/↓ j/k class {}/{} · }} relationship {}/{} · Enter follow · Backspace back\nH/J/K/L pan · Home reset · ] source · o open · R reload · n note · S send notes",
@@ -180,66 +193,107 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, model: &Model, step: &str) {
         Paragraph::new(controls).block(pane::block(&title, focused)),
         header,
     );
-    let selected_style = Style::default().cyan().bold();
     let mut canvas = Canvas::default();
-    let left_width = card_width(node);
-    let right_x = left_width + GAP;
-    canvas.card(node, 0, 0, left_width, PAGE + 5, selected_style);
-    let mut y = 0;
-    for (slot, edge) in relations.iter().skip(page).take(PAGE).enumerate() {
-        let outgoing = edge.from == node.id;
-        let other_id = if outgoing { &edge.to } else { &edge.from };
-        let Some(other) = graph.nodes.iter().find(|other| &other.id == other_id) else {
+    // Two stable columns keep the layout independent of selection and viewport size.
+    let width = diagram
+        .rows
+        .iter()
+        .map(|(index, _)| card_width(&graph.nodes[*index]))
+        .max()
+        .unwrap_or(26);
+    let mut positions = std::collections::HashMap::new();
+    let mut y = 1;
+    for row in diagram.rows.chunks(2) {
+        let mut row_height = 0;
+        for (column, (index, _)) in row.iter().enumerate() {
+            let item = &graph.nodes[*index];
+            let x = GAP + column * (width + GAP);
+            let style = if item.id == node.id {
+                Style::default().cyan().bold()
+            } else {
+                Style::default()
+            };
+            let height = canvas.card(item, x, y, width, 8, style);
+            positions.insert(item.id.as_str(), (x, y, height));
+            row_height = row_height.max(height);
+        }
+        for (index, _) in row {
+            if let Some(position) = positions.get_mut(graph.nodes[*index].id.as_str()) {
+                position.2 = row_height;
+            }
+        }
+        y += row_height + 4;
+    }
+    let active = relations.get(diagram.relation_selected).copied();
+    // Draw the selected connection last so its full route remains traceable at crossings.
+    let mut edges: Vec<_> = graph.edges.iter().collect();
+    edges.sort_by_key(|edge| Some(*edge) == active);
+    for (index, edge) in edges.into_iter().enumerate() {
+        let (Some(&(from_x, from_y, from_height)), Some(&(to_x, to_y, _))) = (
+            positions.get(edge.from.as_str()),
+            positions.get(edge.to.as_str()),
+        ) else {
             continue;
         };
-        let active = page + slot == diagram.relation_selected;
-        let style = if active {
+        let style = if Some(edge) == active {
             Style::default().yellow().bold()
         } else {
             Style::default().dim()
         };
-        let height = canvas.card(other, right_x, y, card_width(other), 8, style);
-        let start_y = 3 + slot;
-        let end_y = y + 3;
-        let lane = left_width + 2 + (PAGE - 1 - slot) * 2;
+        let outgoing = from_x < to_x;
         let (left, right, line) = endpoints(edge.kind, outgoing);
-        canvas.text(left_width - 1, start_y, "┼", style);
-        canvas.horizontal(left_width, lane, start_y, line, style);
-        if start_y != end_y {
-            let vertical = if line == '╌' { '╎' } else { '│' };
-            for row in start_y.min(end_y) + 1..start_y.max(end_y) {
-                canvas.text(lane, row, vertical.to_string(), style);
+        if from_y == to_y && from_x != to_x {
+            let x = from_x.min(to_x) + width;
+            let end = from_x.max(to_x);
+            let port_y = from_y + 3;
+            canvas.horizontal(x, end, port_y, line, style);
+            canvas.text(x - 1, port_y, "┼", style);
+            canvas.text(end, port_y, "┼", style);
+            canvas.text(x, port_y, left, style);
+            if !right.is_empty() {
+                canvas.text(end - 1, port_y, right, style);
             }
-            canvas.text(
-                lane,
-                start_y,
-                if end_y > start_y { "┐" } else { "┘" },
+        } else {
+            // Route through column gutters and the space below the source card.
+            // Both endpoints face right, including self-links and reverse relationships.
+            let start = from_x + width;
+            let end = to_x + width;
+            let start_y = from_y + 3;
+            let end_y = to_y + if edge.from == edge.to { 5 } else { 3 };
+            let source_lane = start + 3 + index % 8;
+            let target_lane = end + 13 + index % 8;
+            let channel_y = from_y + from_height + 1;
+            let (diamond, _, _) = endpoints(edge.kind, true);
+            let (arrow, _, _) = endpoints(edge.kind, false);
+            canvas.horizontal(start, source_lane + 1, start_y, line, style);
+            canvas.vertical(source_lane, start_y, channel_y, line, style);
+            canvas.horizontal(
+                source_lane.min(target_lane),
+                source_lane.max(target_lane) + 1,
+                channel_y,
+                line,
                 style,
             );
-            canvas.text(lane, end_y, if end_y > start_y { "└" } else { "┌" }, style);
-        } else {
-            canvas.text(lane, start_y, line.to_string(), style);
+            canvas.vertical(target_lane, channel_y, end_y, line, style);
+            canvas.horizontal(end, target_lane + 1, end_y, line, style);
+            for (x, row) in [
+                (source_lane, start_y),
+                (source_lane, channel_y),
+                (target_lane, channel_y),
+                (target_lane, end_y),
+            ] {
+                canvas.text(x, row, "┼", style);
+            }
+            canvas.text(start - 1, start_y, "┼", style);
+            canvas.text(end - 1, end_y, "┼", style);
+            canvas.text(start, start_y, diamond, style);
+            canvas.text(end, end_y, arrow, style);
         }
-        canvas.horizontal(lane + 1, right_x, end_y, line, style);
-        canvas.text(left_width, start_y, left, style);
-        if !right.is_empty() {
-            canvas.text(right_x - 1, end_y, right, style);
-        }
-        canvas.text(right_x, end_y, "┼", style);
-        canvas.text(
-            left_width + 10,
-            end_y.saturating_sub(1),
-            edge.kind.label(),
-            style,
-        );
-        y += height + 2;
     }
     let viewport_title = format!(
-        " {} · neighbors {}–{} of {} · pan {},{} ",
-        node.label,
-        if relations.is_empty() { 0 } else { page + 1 },
-        (page + PAGE).min(relations.len()),
-        relations.len(),
+        " Whole change · {} classes · {} relationships · pan {},{} ",
+        diagram.rows.len(),
+        graph.edges.len(),
         diagram.pan_x,
         diagram.pan_y
     );

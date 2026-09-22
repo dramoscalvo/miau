@@ -2,10 +2,11 @@
 
 [Back to usage](usage.md)
 
-Planning and implementation reports provide two review points: a **Proposed UML class diagram** before implementation,
-and an **Observed UML class diagram** of the resulting code. The shared output contract and bundled roles request
+UML review happens after implementation; planning and pre-implementation critique do not generate UML.
+Implementation reports provide an **Observed UML class diagram** covering the whole change.
+The shared output contract and bundled roles request
 version 2 classifier nodes with attributes, operations, and UML relationships. A module dependency graph does not
-satisfy that request. Stable type IDs let you retain selection when browsing between the plan and implementation.
+satisfy that request. Stable type IDs let you retain selection when browsing stored diagrams.
 Agents explain deviations from the plan and disclose omitted members. For changes without meaningful class/type
 relationships, they explain why a class diagram is not applicable. These are agent instructions, not an automatic
 completeness check or approval rule.
@@ -16,9 +17,11 @@ attribute, and operation compartments. Interfaces show `«interface»`, abstract
 show `«enumeration»`. Empty member arrays mean empty compartments; absent arrays show **not recorded**, rather than
 claiming that an older artifact describes a class with no members.
 
-The canvas focuses on the selected class and its relationships, four at a time. It draws a neighboring box for each
-relationship, so a type may appear more than once; IDs in the details identify the actual entities, including self
-relationships. Solid lines with hollow triangles show inheritance; dashed lines with hollow triangles show interface
+The canvas shows all classes and their relationships together in a stable two-column layout. Each class appears once,
+including disconnected types. Selection highlights a class and its active relationship without filtering or rearranging
+the graph or resetting the pan position. Large graphs extend beyond the viewport and can be panned;
+there is no four-relationship page limit.
+Solid lines with hollow triangles show inheritance; dashed lines with hollow triangles show interface
 implementation. Dependencies use dashed arrows; associations use solid lines. Hollow/filled diamonds show aggregation/
 composition at the whole end. The active relationship is highlighted. Use `}` to cycle relationships, Enter to follow
 the active relationship, and Backspace to return. Use Up/Down or `j`/`k` to select any class, including disconnected types.
@@ -26,11 +29,11 @@ the active relationship, and Backspace to return. Use Up/Down or `j`/`k` to sele
 Use uppercase `H`/`J`/`K`/`L` to pan left/down/up/right and Home to reset the canvas. Narrow terminals may need horizontal
 panning to see both ends. Long signatures are clipped in boxes; their full text remains in the scrollable class details.
 Page Up/Page Down scrolls those details. Class notes, source opening, reload, and human review gates work as before.
-Left/Right browses workflow steps while retaining selection by type ID, so you can inspect the plan and implementation
+Left/Right browses workflow steps while retaining selection by type ID, so you can inspect stored artifacts
 without leaving Diagram. Each diagram stays in its own versioned artifact; there is no side-by-side diff.
 
 Existing artifacts are preserved. Untyped/module-only graphs retain the hierarchy browser. Request an updated version 2
-class diagram through Request changes to replace an old planning or implementation diagram. A report carries one
+class diagram through Request changes on the implementation step. A report carries one
 `miau-graph` JSON fence inside `# Handoff`; ordinary Mermaid/text fences do not activate the interactive view.
 
 ## Deterministic TypeScript extraction
@@ -153,12 +156,13 @@ not a signature or independent verification. The TUI distinguishes extractor-rep
 Agents may select scope, invoke the extractor, describe observed relationships, and interpret warnings. They must
 preserve the generated graph and metadata: they must not modify observed edges, invent semantic nodes, convert
 associations into composition, classify directories into architecture layers, or manually repair unresolved compiler
-relationships. Use a separate `status: proposed` diagram for intended or interpreted architecture. No additional
-companion agent is required.
+relationships. Describe intended or interpreted architecture in prose. No additional companion agent is required.
 
 ### The model's role
 
 The extraction pipeline is `source + tsconfig → TypeScript compiler API → validated graph → Markdown artifact`.
+Extraction and TUI rendering consume no model tokens. Agent-authored diagrams, agent interpretation, and reading graph
+content in an agent session still use tokens. The bundled `impacted-diagram` command step runs without an agent.
 Model choice has no effect on its relationships or output ordering. An optional coding agent can choose a config,
 invoke the command, summarize warnings, or propose a redesign through the ordinary human-gated workflow.
 Assess that agent on interpretation and instruction-following; extraction correctness is covered by compiler fixtures
@@ -176,15 +180,17 @@ opening sources, and saving notes never approve a step or start an agent.
 | Up/Down or `k`/`j` | Select a class; in legacy graphs, select a box at the current hierarchy level. |
 | Enter | Follow the active UML relationship; in legacy graphs, drill into children. |
 | Backspace | Return to the previous class; in legacy graphs, return to the parent level. |
-| `}` | Cycle the selected class's relationships and their pages. |
+| `}` | Highlight the next relationship of the selected class on the whole graph. |
 | `H`/`J`/`K`/`L`, Home | Pan the UML canvas left/down/up/right, or reset its position. |
 | Page Up/Page Down | Scroll the selected node's relationship details. |
 | `]` | Cycle through its source reference and the sources cited by its relationships. |
 | `o` | Open the selected source file in `$EDITOR` (default `vi`) while no process is active. |
 | `R` | Reload the diagram from the artifact on disk. |
+| `Esc` | Return to the complete document view. |
 | Left/Right | Browse before/after workflow steps, retaining the selected entity when possible. |
 | `n` | Add or edit a saved note on the selected node of an agent step. |
 | `S` | Submit current diagram notes as Request changes; return to human review after the agent finishes. |
+| `p`/`r` | Open the prompt to send a request for changes while the UML view is open. |
 | `v` | Continue cycling through the artifact views. |
 
 Notes use the existing multiline editor: type to edit, Enter inserts a newline, Esc returns to normal mode, then
@@ -265,7 +271,7 @@ hierarchy order, with Enter revealing a selected node's children.
 Version 2 classifier nodes accept optional `attributes` and `operations` arrays of nonblank, single-line strings.
 Use UML signatures such as `- path: Path`, `+ save(value: Artifact): Result`, and `# count: number {static}`.
 `+`, `-`, and `#` mean public, private, and protected. `{readOnly}` and `{abstract}` retain those modifiers.
-Enum attributes list literals. Include both arrays in new planning/implementation diagrams, using `[]` for empty
+Enum attributes list literals. Include both arrays in new implementation diagrams, using `[]` for empty
 compartments. Omitted fields represent unknown members. Member fields on container nodes or version 1 graphs are rejected.
 The optional node `source` has `file` and `line`. Paths use `/`, are relative to the project, and cannot contain
 `.` or `..` segments, backslashes, colons, or control characters. Lines must be positive integers.

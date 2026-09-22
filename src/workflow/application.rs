@@ -496,6 +496,21 @@ mod tests {
                     let prompt = orchestrator.assemble_prompt(&run, None).unwrap();
                     assert!(prompt.contains(instructions));
                     assert!(prompt.ends_with(include_str!("artifact-contract.md")));
+                    for section in [
+                        "## Objective",
+                        "## Scope",
+                        "## Behavior",
+                        "## Tests",
+                        "## Assumptions",
+                        "## References",
+                        "## Implemented plan",
+                    ] {
+                        assert!(
+                            prompt.contains(section),
+                            "{role}/{agent}: missing {section}"
+                        );
+                    }
+                    assert!(!prompt.contains("aim for 24 short lines"));
                     let example = prompt
                         .split_once("```markdown\n")
                         .and_then(|(_, rest)| rest.split_once("\n```"))

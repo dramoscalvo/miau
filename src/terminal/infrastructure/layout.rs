@@ -9,7 +9,7 @@ pub struct Areas {
 }
 
 pub fn areas(area: Rect, prompt: Option<&str>) -> Areas {
-    let help_height = prompt.map_or(4, |prompt| {
+    let help_height = prompt.map_or(2, |prompt| {
         let inner_width = area.width.saturating_sub(2) as usize;
         let row_count = u16::try_from(prompt_rows(prompt, inner_width).len()).unwrap_or(u16::MAX);
         let desired = row_count.saturating_add(2);
@@ -51,6 +51,11 @@ pub fn run_list_areas(area: Rect) -> Areas {
 mod tests {
     use super::{areas, run_list_areas};
     use ratatui::layout::Rect;
+
+    #[test]
+    fn footer_reserves_only_two_rows() {
+        assert_eq!(areas(Rect::new(0, 0, 80, 24), None).help.height, 2);
+    }
 
     #[test]
     fn activity_pane_uses_one_quarter_of_the_window_width() {

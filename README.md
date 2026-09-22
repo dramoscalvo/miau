@@ -42,8 +42,8 @@ and revisiting steps.
 
 ## Architecture diagrams
 
-Planning reports request a proposed UML class diagram; implementation reports request an observed one with the same
-type IDs. The TUI draws class compartments and connected UML arrows. Press `g` to open it, `j`/`k` to select a class,
+UML is requested only after implementation. The TUI shows the whole change on one pannable canvas, with each class
+appearing once, member compartments, and connected UML arrows. Press `g` to open it, `j`/`k` to select a class,
 `}` to select a relationship, Enter to follow it, and Backspace to return. Use `H`/`J`/`K`/`L` to pan and Home to reset.
 Left/Right compares workflow steps while retaining class selection. Existing reports are preserved; use Request changes
 to ask for an updated class diagram if an older report contains only a dependency graph.

@@ -84,6 +84,39 @@ fn answer_draft_survives_navigation_without_submitting() {
     assert!(fixture.app.running.is_none());
 }
 
+#[test]
+fn escape_closes_answer_in_one_press_and_preserves_draft() {
+    for key in [
+        KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+    ] {
+        let mut fixture = Fixture::new();
+        fixture.app.ui.open_answer();
+        fixture.app.ui.update(Message::Paste("Sí, TOML.".into()));
+        fixture.app.handle_answer_key(key, 80).unwrap();
+        assert_eq!(fixture.app.ui.mode, Mode::Gate);
+        assert!(fixture.app.running.is_none());
+        assert!(!fixture.root.join("runs/001/feedback-0.md").exists());
+        fixture.app.return_to_run_list();
+        fixture.app.open_selected().unwrap();
+        fixture.app.ui.open_answer();
+        assert_eq!(fixture.app.ui.prompt, "Sí, TOML.");
+    }
+}
+
+#[test]
+fn answer_enter_keeps_editing_with_a_newline() {
+    let mut fixture = Fixture::new();
+    fixture.app.ui.open_answer();
+    fixture.app.ui.update(Message::Paste("Sí, TOML.".into()));
+    fixture
+        .app
+        .handle_answer_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), 80)
+        .unwrap();
+    assert_eq!(fixture.app.ui.mode, Mode::Prompt(PromptKind::Answer));
+    assert_eq!(fixture.app.ui.prompt, "Sí, TOML.\n");
+}
+
 #[tokio::test]
 async fn submitting_empty_answers_does_not_start_an_agent() {
     let mut fixture = Fixture::new();
@@ -174,7 +207,9 @@ fn decision_screen_renders_questions_and_answer_on_small_and_regular_terminals()
     for (width, height) in [(1, 1), (25, 8), (100, 30)] {
         let mut terminal =
             Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
-        terminal.draw(|frame| draw(frame, &fixture.app)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &mut fixture.app))
+            .unwrap();
         if width == 100 {
             let text: String = terminal
                 .backend()

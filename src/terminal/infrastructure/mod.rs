@@ -78,8 +78,37 @@ struct App {
     orchestrator: Orchestrator<FileRepository>,
 }
 
+fn handle_help_key(ui: &mut Model, key: KeyEvent) -> bool {
+    if ui.help_open {
+        match key.code {
+            KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('?') => ui.help_open = false,
+            KeyCode::Up | KeyCode::Char('k') => ui.help_scroll = ui.help_scroll.saturating_sub(1),
+            KeyCode::Down | KeyCode::Char('j') => ui.help_scroll = ui.help_scroll.saturating_add(1),
+            KeyCode::PageUp => ui.help_scroll = ui.help_scroll.saturating_sub(8),
+            KeyCode::PageDown => ui.help_scroll = ui.help_scroll.saturating_add(8),
+            KeyCode::Home => ui.help_scroll = 0,
+            KeyCode::End => ui.help_scroll = u16::MAX,
+            _ => {}
+        }
+        return true;
+    }
+    let typing = matches!(ui.mode, Mode::Prompt(_))
+        && (ui.prompt_edit_mode == PromptEditMode::Insert
+            || ui.mode == Mode::Prompt(PromptKind::Answer));
+    if key.code == KeyCode::F(1) || (key.code == KeyCode::Char('?') && !typing) {
+        ui.help_open = true;
+        ui.help_scroll = 0;
+        return true;
+    }
+    false
+}
+
 fn returns_to_run_list(code: KeyCode, mode: &Mode) -> bool {
     code == KeyCode::Char('b') && matches!(mode, Mode::Gate)
+}
+
+fn returns_to_document(code: KeyCode, detail_view: DetailView) -> bool {
+    code == KeyCode::Esc && detail_view == DetailView::Diagram
 }
 
 fn diagram_message(code: KeyCode) -> Option<Message> {
@@ -414,6 +443,23 @@ impl App {
         Ok(())
     }
 
+    fn handle_answer_key(&mut self, key: KeyEvent, width: usize) -> Result<()> {
+        if key.code == KeyCode::Esc
+            || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))
+        {
+            self.save_answer()?;
+            self.ui.cancel_prompt();
+        } else {
+            if key.code == KeyCode::Enter {
+                self.ui.update(Message::Input('\n'));
+            } else {
+                handle_insert_prompt_key(&mut self.ui, key, width);
+            }
+            self.save_answer()?;
+        }
+        Ok(())
+    }
+
     fn save_answer(&mut self) -> Result<()> {
         if self.ui.mode == Mode::Prompt(PromptKind::DiagramNote) {
             if let (Some(graph), Some(node), Some(run)) = (
@@ -735,6 +781,9 @@ impl App {
         key: KeyEvent,
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     ) -> Result<bool> {
+        if handle_help_key(&mut self.ui, key) {
+            return Ok(false);
+        }
         let code = key.code;
         match &self.ui.mode {
             Mode::Confirm(action) => {
@@ -763,6 +812,10 @@ impl App {
             }
             Mode::Prompt(_) => {
                 let prompt_width = terminal.size()?.width.saturating_sub(2).max(1) as usize;
+                if self.ui.mode == Mode::Prompt(PromptKind::Answer) {
+                    self.handle_answer_key(key, prompt_width)?;
+                    return Ok(false);
+                }
                 let answering = matches!(
                     self.ui.mode,
                     Mode::Prompt(PromptKind::Answer | PromptKind::DiagramNote)
@@ -841,6 +894,11 @@ impl App {
         match code {
             _ if returns_to_run_list(code, &self.ui.mode) => {
                 self.return_to_run_list();
+            }
+            _ if returns_to_document(code, self.ui.detail_view) => {
+                self.ui.detail_view = DetailView::Artifact;
+                self.ui.focus = crate::terminal::application::Focus::Flow;
+                self.ui.flow_scroll = 0;
             }
             KeyCode::Char('v') => {
                 let view = self.ui.detail_view;
@@ -1200,7 +1258,7 @@ async fn event_loop(
         tokio::select! {
             event = input.next() => if let Some(event) = event { match event? {
                 TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => if app.key(key, terminal).await? { break; },
-                TerminalEvent::Paste(text) if matches!(app.ui.mode, Mode::Prompt(_)) => {
+                TerminalEvent::Paste(text) if !app.ui.help_open && matches!(app.ui.mode, Mode::Prompt(_)) => {
                     app.ui.update(Message::Paste(text));
                     app.save_answer()?;
                 },
@@ -1214,7 +1272,7 @@ async fn event_loop(
     Ok(())
 }
 
-fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
+fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
     let prompt = matches!(app.ui.mode, Mode::Prompt(_)).then_some(app.ui.prompt.as_str());
     let areas = if matches!(app.ui.mode, Mode::RunList) {
         layout::run_list_areas(frame.area())
@@ -1279,55 +1337,85 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &App) {
             app.ui.focus,
         );
     }
-    help::render(
-        frame,
-        areas.help,
-        help::HelpView {
-            mode: &app.ui.mode,
-            prompt_edit_mode: app.ui.prompt_edit_mode,
-            detail_view: app.ui.detail_view,
-            has_review: artifact_review(&app.artifact).is_some(),
-            status: app
-                .run
-                .as_ref()
-                .and_then(|run| run.nodes.get(app.ui.viewed_node).map(|node| node.status)),
-            is_current: app
-                .run
-                .as_ref()
-                .is_some_and(|run| run.cursor == app.ui.viewed_node),
-            can_prompt: app.prompt_ready(),
-            can_discuss: app.discuss_ready(),
-            can_finish: can_finish(app.run.as_ref(), &app.ui.mode),
-            error: if matches!(
-                app.ui.detail_view,
-                DetailView::Decisions | DetailView::Diagram
-            ) || app
-                .run
-                .as_ref()
-                .is_some_and(|run| run.cursor == app.ui.viewed_node)
-            {
-                app.ui.error.as_deref()
-            } else {
-                None
-            },
-            prompt: &app.ui.prompt,
-            prompt_cursor: app.ui.prompt_cursor(),
+    let help_view = help::HelpView {
+        mode: &app.ui.mode,
+        prompt_edit_mode: app.ui.prompt_edit_mode,
+        detail_view: app.ui.detail_view,
+        has_review: artifact_review(&app.artifact).is_some(),
+        status: app
+            .run
+            .as_ref()
+            .and_then(|run| run.nodes.get(app.ui.viewed_node).map(|node| node.status)),
+        is_current: app
+            .run
+            .as_ref()
+            .is_some_and(|run| run.cursor == app.ui.viewed_node),
+        can_prompt: app.prompt_ready(),
+        can_discuss: app.discuss_ready(),
+        can_finish: can_finish(app.run.as_ref(), &app.ui.mode),
+        error: if matches!(
+            app.ui.detail_view,
+            DetailView::Decisions | DetailView::Diagram
+        ) || app
+            .run
+            .as_ref()
+            .is_some_and(|run| run.cursor == app.ui.viewed_node)
+        {
+            app.ui.error.as_deref()
+        } else {
+            None
         },
-    );
+        prompt: &app.ui.prompt,
+        prompt_cursor: app.ui.prompt_cursor(),
+        show_cursor: !app.ui.help_open,
+    };
+    help::render(frame, areas.help, &help_view);
+    if app.ui.help_open {
+        help::render_popup(frame, &help_view, &mut app.ui.help_scroll);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         can_finish, confirmation_result_mode, handle_insert_prompt_key, handle_normal_prompt_key,
-        prompt_kind, returns_to_run_list,
+        prompt_kind, returns_to_document, returns_to_run_list,
     };
     use crate::{
         runs::domain::{Node, NodeStatus, Run},
-        terminal::application::{Action, Message, Mode, Model, PromptEditMode, PromptKind},
+        terminal::application::{
+            Action, DetailView, Message, Mode, Model, PromptEditMode, PromptKind,
+        },
     };
     use chrono::Utc;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    fn help_consumes_actions_and_restores_the_underlying_mode() {
+        let mut model = Model::default();
+        let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
+        assert!(super::handle_help_key(&mut model, key(KeyCode::Char('?'))));
+        assert!(model.help_open);
+        assert!(super::handle_help_key(&mut model, key(KeyCode::Char('q'))));
+        assert!(super::handle_help_key(&mut model, key(KeyCode::Esc)));
+        assert!(!model.help_open);
+        assert_eq!(model.mode, Mode::RunList);
+    }
+
+    #[test]
+    fn question_mark_remains_text_in_insert_mode_but_f1_opens_help() {
+        let mut model = Model::default();
+        model.open_prompt(PromptKind::Initial);
+        model.update(Message::EnterPromptInsertMode);
+        assert!(!super::handle_help_key(
+            &mut model,
+            KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE)
+        ));
+        assert!(super::handle_help_key(
+            &mut model,
+            KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE)
+        ));
+    }
 
     #[test]
     fn b_returns_to_run_list_only_from_a_project_gate() {
@@ -1338,6 +1426,16 @@ mod tests {
             ),
             (true, false)
         );
+    }
+
+    #[test]
+    fn escape_returns_from_diagram_to_the_document_view() {
+        assert!(returns_to_document(KeyCode::Esc, DetailView::Diagram));
+        assert!(!returns_to_document(KeyCode::Esc, DetailView::Artifact));
+        assert!(!returns_to_document(
+            KeyCode::Backspace,
+            DetailView::Diagram
+        ));
     }
 
     #[test]

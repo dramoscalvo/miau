@@ -6,6 +6,10 @@ The initial screen summarizes each run's status, project, current workflow step,
 Moving the selection updates the detail pane with the next human action, current attempt and duration, and recent
 activity. Press `n` to create a run, or Enter to open the selected run.
 
+The bottom bar shows the main actions for the current screen. Press `?` to open the full shortcut popup, or `F1`
+while typing in a prompt. Scroll help with Up/Down or Page Up/Page Down; `Esc`, `?`, or `F1` closes it. Help leaves
+your current screen and draft intact, and workflow action keys are inactive until you close it.
+
 Before starting a pending node, press `p`, type an initial prompt, and press Enter to save it; then press `s` to start
 the node. After an agent finishes, `r` opens **Request changes** and Enter sends it immediately. `p` remains an alias.
 Before a step starts, `r` also opens the initial prompt box. The box opens in Vim-style Normal mode and wraps and grows
@@ -38,8 +42,8 @@ The view shows each decision's ID and draft status, with the selected question's
 below. Page Up/Page Down scroll the question and answer. Left/Right still select workflow steps, and `v` cycles through
 Decisions, Review summary, Complete document, Git changes, and Diagram; views absent from the artifact are skipped.
 
-Answer fields open in Insert mode. Enter inserts a newline; Escape or Ctrl+C returns to Normal mode, where Enter or Escape
-returns to Decisions. The usual Vim editing commands and multiline clipboard paste work. Each edit saves the draft
+Answer fields open ready to type. Enter inserts a newline; Escape or Ctrl+C saves the draft and returns directly to
+Decisions in one press. Arrow keys, Backspace, Delete, and multiline clipboard paste work. Each edit saves the draft
 in `decision-drafts-N.json` in the run directory, scoped to the zero-based step index N. Drafts survive navigation and
 restarting miau. This differs from the unsent free-form Request changes box described above.
 
@@ -104,11 +108,13 @@ to cycle through **Review summary**, **Complete document** (the same review plus
 agent), and the project's live Git working tree. Use Up/Down or Page Up/Page Down to scroll document text when it
 exceeds the pane. Old or incomplete artifacts without a separate review section show **Complete document**; `v` switches
 directly between that document and Git changes, skipping the duplicate summary view. Editing still opens the single
-canonical artifact, and the preview reloads after the editor returns. The one-screen target is guidance, not a
-truncation or approval rule. Ordinary diagrams and Gherkin remain text, and scenarios are not automatically executed.
-The output contract requests a proposed UML class diagram for structural plans and an observed one after implementation.
+canonical artifact, and the preview reloads after the editor returns. Feature documents include Objective, Scope,
+Behavior, Tests, Assumptions, and References; implementation reports add Implemented plan. Review can span multiple
+screens, with human decisions first. Critiques and reviews focus on findings and verification. Ordinary diagrams and Gherkin remain text, and scenarios are not automatically executed.
+The output contract requests UML only after implementation, covering the whole change in one observed class diagram.
 A `miau-graph` block in Handoff adds the interactive [Diagram view](diagrams.md), with member compartments and connected
-arrows. Press `g` to open it directly; Left/Right browses the before/after workflow steps. Select classes with `j`/`k`,
+arrows on a stable canvas. Press `g` to open it directly; pan with `H`/`J`/`K`/`L` when the graph exceeds the viewport.
+Left/Right browses workflow steps. Select classes with `j`/`k`,
 cycle relationships with `}`, follow one with Enter, and return with Backspace. Press `n` to save a note on an element,
 then `S` to submit all current diagram notes as Request changes.
 Saving notes does not start an agent or approve the step. Approval remains the explicit `a` action.
@@ -147,6 +153,7 @@ project screen remains visible so active work cannot be hidden accidentally. Pre
 agent without quitting miau. The interrupted node remains at its decision gate.
 
 In UML class diagrams, `j`/`k` selects a class, `}` selects a relationship, Enter follows it, and Backspace returns.
-Use uppercase `H`/`J`/`K`/`L` to pan and Home to reset. Left/Right keeps Diagram open while browsing the planning and
-implementation steps, preserving the selected type when its stable ID exists in both artifacts. Older reports remain
+Press `Esc` to return to the complete document view. Use uppercase `H`/`J`/`K`/`L` to pan and Home to reset. Left/Right keeps Diagram open while browsing the planning and
+implementation steps, preserving the selected type when its stable ID exists in both artifacts. Press `p` or `r` to
+return to the prompt and request changes without leaving Diagram. Older reports remain
 readable; use Request changes to ask the agent for a version 2 class diagram with attributes and operations.

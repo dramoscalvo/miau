@@ -67,11 +67,17 @@ writes = "implementation.md"
 Role files are plain Markdown instructions named after the workflow role, such as `roles/planner.md` for `role =
 "planner"`.
 
-Each agent returns one Markdown artifact with `# Review` and `# Handoff` sections. Review targets one screen: goal,
-decisions/risks, a proposed or observed A/M/D/R file tree, short Given/When/Then cases with stable IDs, and verification
-results. Handoff adds only technical constraints, evidence paths, unresolved issues, and the next task. Unchanged cases
-and upstream plans are referenced instead of copied. This output contract is built into prompt assembly, so it also
-applies to existing user role files without overwriting them.
+Each agent returns one Markdown artifact with `# Review` and `# Handoff` sections. Plans use a feature document in
+Review: Objective, Scope (in/out), Behavior, Tests (Unit/Integration/E2E Given/When/Then scenarios with stable IDs),
+Assumptions, and References. Implementation reports describe the delivered feature using the same sections and add
+Implemented plan with shipped changes, design decisions, deviations, changed files, and verification results. The
+approved upstream plan stays intact. Critiques and reviews use Findings, Verification, and References instead of
+repeating the feature. Human decisions appear before these sections using the dedicated decision format.
+
+Documents have no one-screen limit or mandatory file tree. Handoff adds only information needed by the next agent
+and the observed implementation diagram when applicable. Run metadata stays in miau rather than YAML frontmatter.
+This output contract is built into prompt assembly, so it also applies to existing user role files without
+overwriting them.
 
 Later agents receive an index of completed upstream artifact paths, using their current versions, plus a feedback
 reference when revisiting a step. They are instructed to read relevant artifacts from disk, including the plan before
