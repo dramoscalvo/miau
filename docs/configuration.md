@@ -15,7 +15,7 @@ includes Claude Code and Codex examples:
 [claude]
 bin = "claude"
 effort = "high"
-args = ["--model", "opus", "--effort", "{effort}", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
+args = ["--model", "opus-5.5", "--effort", "{effort}", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
 resume_args = ["--resume", "{session}"]
 discuss_args = ["--resume", "{session}"]
 parser = "claude"
@@ -23,7 +23,7 @@ parser = "claude"
 [codex]
 bin = "codex"
 effort = "medium"
-args = ["exec", "--json", "--model", "gpt-5.6-sol", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"]
+args = ["exec", "--json", "--model", "gpt-6-sol", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"]
 resume_args = ["resume", "{session}"]
 resume_insert_at = 1
 schema_args = ["--output-schema", "{schema}"]
