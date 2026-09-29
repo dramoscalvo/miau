@@ -511,6 +511,35 @@ mod tests {
                         );
                     }
                     assert!(!prompt.contains("aim for 24 short lines"));
+                    let feature_template = prompt
+                        .split_once("Feature document template (planning and implementation):\n\n```markdown\n")
+                        .and_then(|(_, rest)| rest.split_once("\n```"))
+                        .map(|(template, _)| template)
+                        .expect("every role needs a complete feature document template");
+                    let mut remaining = feature_template;
+                    for heading in [
+                        "# Review",
+                        "## Objective",
+                        "## Scope",
+                        "## Behavior",
+                        "## Tests",
+                        "### Unit tests",
+                        "### Integration tests",
+                        "### E2E tests",
+                        "## Assumptions",
+                        "## References",
+                        "# Handoff",
+                    ] {
+                        remaining = remaining
+                            .split_once(heading)
+                            .unwrap_or_else(|| {
+                                panic!("{role}/{agent}: missing or unordered {heading}")
+                            })
+                            .1;
+                    }
+                    assert!(
+                        prompt.contains("On every revision, return the complete updated document")
+                    );
                     let example = prompt
                         .split_once("```markdown\n")
                         .and_then(|(_, rest)| rest.split_once("\n```"))

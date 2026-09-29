@@ -11,6 +11,13 @@ so would damage their meaning or Markdown syntax.
 Write a concrete feature document, with enough detail to implement and review the behavior.
 Use plain prose, specific rules, and meaningful examples. Do not compress the document to
 one screen or pad it with generic advice, discovery narratives, or repeated information.
+The feature document is the deliverable, including when a role asks you to summarize changes.
+Use the complete template below for planning and implementation. Fill it with feature-specific
+content; headings alone, a progress report, a file list, or a link to the plan are insufficient.
+On every revision, return the complete updated document, incorporating human answers and preserving
+still-applicable behavior and test scenarios. Do not return only a delta or refer to an earlier
+version for required sections. Keep test scenarios separate from verification commands and results.
+Write this structure inside the miau artifact; do not create a separate specs directory just to satisfy it.
 
 For planning, put the feature title in a short opening line in Review, then use these
 second-level sections in order:
@@ -169,6 +176,82 @@ Migration behavior is blocked on D1.
 Before returning, check that every request for human input has a unique stable
 `## D<number>: Question` heading directly inside `# Review` (not nested under a
 findings heading), exactly one plain status line, and enough context to answer.
+
+Feature document template (planning and implementation):
+
+```markdown
+# Review
+
+Feature: <short feature title>
+
+## Objective
+
+<Externally observable outcome that defines done.>
+
+## Scope
+
+**In scope:**
+
+- <Concrete behavior included in this change.>
+
+**Out of scope:**
+
+- <Relevant boundary of this change.>
+
+## Behavior
+
+### <Feature-specific rule or flow>
+
+<Explain triggers, concrete values or mappings, outcomes, validation and failure behavior.
+Use additional descriptive subsections for distinct rules. Reference existing contracts
+and diagrams instead of repeating their schemas or structure.>
+
+## Tests
+
+### Unit tests
+
+1. Scenario: UT-1 — <descriptive scenario name>
+
+- Given <specific initial state or input>.
+- When <action occurs>.
+- Then <observable result, including relevant side effects>.
+
+### Integration tests
+
+1. Scenario: IT-1 — <descriptive scenario name>
+
+- Given <collaborating components and controlled dependencies>.
+- When <the feature crosses the relevant boundary>.
+- Then <observable result at that boundary>.
+
+### E2E tests
+
+<Give applicable scenarios with stable IDs and Given/When/Then bullets,
+or write None and explain why this level is inapplicable.>
+
+## Assumptions
+
+- <Design assumption affecting implementation, or None if there are none.>
+
+## References
+
+- Related code: <existing paths or symbols>.
+- Related artifacts, diagrams or contracts: <actual paths when applicable>.
+
+# Handoff
+
+<Additional context needed by the next agent, unresolved decision IDs, and next task.>
+```
+
+Replace every placeholder with actual content. Add as many behavior rules and test scenarios as the
+feature needs; do not limit coverage to the sample scenario count. For any inapplicable test level,
+write None with a reason. Insert human decisions after the feature title using the decision format
+above. The decision-only example demonstrates question syntax; it is not a feature-document template.
+If blocked, retain the sections you can substantiate and identify which details await an open decision.
+For implementation, insert `## Implemented plan` after References and before Handoff, including
+delivered changes, reasons and deviations, files changed, and verification outcomes with evidence.
+Check the final document against the approved plan and each acceptance ID before returning it.
+Critique and review roles use their Findings, Verification, and References structure instead.
 
 In Handoff, record only additional information the next agent needs: relevant
 paths/symbols, constraints, non-obvious decisions and their reasons, unresolved
