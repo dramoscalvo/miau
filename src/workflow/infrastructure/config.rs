@@ -196,41 +196,14 @@ mod tests {
     }
 
     #[test]
-    fn embedded_workflow_runs_impacted_diagram_after_implementation() {
+    fn embedded_workflow_does_not_run_a_diagram_by_default() {
         let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
         let names: Vec<_> = workflow
             .nodes
             .iter()
             .map(|node| node.name.as_str())
             .collect();
-        let implementation = names.iter().position(|name| *name == "implement").unwrap();
-        let diagram = names
-            .iter()
-            .position(|name| *name == "impacted-diagram")
-            .unwrap();
-        let review = names.iter().position(|name| *name == "review").unwrap();
-
-        assert!(implementation < diagram && diagram < review);
-        assert_eq!(
-            workflow.nodes[diagram]
-                .command
-                .as_ref()
-                .unwrap()
-                .iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>(),
-            [
-                "miau",
-                "diagram",
-                "typescript",
-                "--scope",
-                "types",
-                "--changed",
-                "--project",
-                "tsconfig.json",
-                "--root",
-                ".",
-            ]
-        );
+        assert_eq!(names, ["plan", "critique", "implement", "review"]);
+        assert!(workflow.nodes.iter().all(|node| node.command.is_none()));
     }
 }

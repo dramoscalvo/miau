@@ -42,7 +42,7 @@ and revisiting steps.
 
 ## Architecture diagrams
 
-UML is requested only after implementation. The TUI shows the whole change on one pannable canvas, with each class
+UML is available after implementation when requested. The TUI shows the whole change on one pannable canvas, with each class
 appearing once, member compartments, and connected UML arrows. Press `g` to open it, `j`/`k` to select a class,
 `}` to select a relationship, Enter to follow it, and Backspace to return. Use `H`/`J`/`K`/`L` to pan and Home to reset.
 Left/Right compares workflow steps while retaining class selection. Existing reports are preserved; use Request changes
@@ -63,9 +63,10 @@ extracts classes, abstract classes, interfaces, enums, inheritance, implements, 
 declared operation dependencies. It does not infer runtime calls, ownership, aggregation, composition, framework
 injection, or architecture layers. The command creates a new file and refuses to overwrite one.
 
-miau's default workflow runs a `--scope types --changed` command after implementation, including new and edited
-TypeScript files and their directly related types. See the
-[workflow configuration](docs/configuration.md#add-a-typescript-diagram-step) to change the project scope or command.
+The default workflow does not generate diagrams. Add the documented command node to opt into a deterministic TypeScript
+diagram after implementation, including new and edited TypeScript files and their directly related types. See the
+[workflow configuration](docs/configuration.md#add-a-typescript-diagram-step) to enable it and choose the project
+scope or command.
 Open cited sources in your editor with `o`; use `n` to save notes on classes and `S` to request changes with those notes.
 Module-only graphs retain the hierarchy browser, with Enter to drill into children.
 When no TypeScript files changed, the command records that no graph applies. Every workflow gate still waits for your

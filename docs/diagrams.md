@@ -2,11 +2,10 @@
 
 [Back to usage](usage.md)
 
-UML review happens after implementation; planning and pre-implementation critique do not generate UML.
-Implementation reports provide an **Observed UML class diagram** covering the whole change.
-The shared output contract and bundled roles request
-version 2 classifier nodes with attributes, operations, and UML relationships. A module dependency graph does not
-satisfy that request. Stable type IDs let you retain selection when browsing stored diagrams.
+UML is opt-in. Planning and pre-implementation critique do not generate UML, and implementation reports include an
+**Observed UML class diagram** only when the workflow step or task requests one. The shared output contract documents
+version 2 classifier nodes with attributes, operations, and UML relationships for requested diagrams. A module dependency
+graph does not satisfy that request. Stable type IDs let you retain selection when browsing stored diagrams.
 Agents explain deviations from the plan and disclose omitted members. For changes without meaningful class/type
 relationships, they explain why a class diagram is not applicable. These are agent instructions, not an automatic
 completeness check or approval rule.

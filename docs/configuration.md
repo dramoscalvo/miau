@@ -129,8 +129,8 @@ compiler-derived classes, interfaces, enums, inheritance, implementations, assoc
 The command runs in the project's directory. Install `miau` and Node.js 18+ on `PATH`, and install the project's locked
 dependencies, including TypeScript 5.6–6.x. Omit `--output`: miau captures stdout as the node's versioned artifact.
 Command nodes need no `agent` or `role`; this one uses no model or API key. Workflow changes apply to newly created
-runs. The checked-in default workflow places this step after implementation; add the same node to existing user
-workflow files because miau preserves those files instead of overwriting them.
+runs. The checked-in default workflow does not include this step. Add it to your workflow after implementation; miau
+preserves existing user workflow files instead of overwriting them.
 
 Start the step with `s`, inspect its report and Diagram view with `v`, then approve with `a` when ready to continue.
 Completion of extraction does not approve the result. Keep `--root` as the run's project directory so source links

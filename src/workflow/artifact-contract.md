@@ -62,15 +62,15 @@ applicable. Recommending an option is allowed; approving or rejecting the workfl
 belongs to the operator.
 
 Do not generate UML during planning or pre-implementation critique. Describe intended
-relationships in prose. After implementation, include an observed UML
-class diagram of the resulting code and explain deviations from the approved design
-in Review. Cover the whole change, including disconnected affected types and their
-relationships, in one graph. Reuse node IDs for the same types across revisions.
+relationships in prose. Include an observed UML class diagram after implementation only
+when the workflow step or task explicitly requests one. When included, explain deviations
+from the approved design in Review. Cover the whole change, including disconnected affected
+types and their relationships, in one graph. Reuse node IDs for the same types across revisions.
 Critiques/reviews can reference existing diagrams without duplicating
 them. For changes without meaningful class/type relationships, explain why a class
 diagram is not applicable instead of inventing classes for files or functions.
 
-For the post-implementation diagram, include one JSON code fence tagged `miau-graph` inside Handoff.
+For an explicitly requested post-implementation diagram, include one JSON code fence tagged `miau-graph` inside Handoff.
 This creates miau's navigable UML class view with connected arrows, member compartments,
 and notes on individual classes. Keep the human explanation in Review and the complete
 graph in the same artifact. Use version 2 and explicit classifier kinds. A directory
@@ -122,7 +122,7 @@ source reference. Never present proposed structure as observed or invent evidenc
 Agent-authored diagrams are reported context, not independent verification or approval.
 Limit the graph to the relevant types (at most 1000 nodes, 5000 edges, and 1 MiB of JSON).
 
-For observed TypeScript class diagrams, use the deterministic generator with
+For explicitly requested observed TypeScript class diagrams, use the deterministic generator with
 `miau diagram typescript --project tsconfig.json --root . --scope types`.
 Select the project's actual leaf tsconfig and use the run's project directory as root.
 It needs Node and the project's installed TypeScript compiler. Preserve the generated
@@ -133,7 +133,7 @@ member signatures. Report unavailable tools or generation failures honestly. For
 other languages, inspect source and supply an agent-reported observed class diagram
 with evidence. Put intended designs in the separate proposed planning artifact.
 Module scope (`--scope modules`, the command default) is useful for import dependencies
-but does not substitute for the post-implementation class diagram.
+but does not substitute for a requested post-implementation class diagram.
 
 For every role and agent, put questions requiring human input in Review as
 second-level headings: `## D1: Question?`, `## D2: Question?`, and so on. Each

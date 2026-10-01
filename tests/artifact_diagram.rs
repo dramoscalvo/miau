@@ -19,13 +19,12 @@ fn diagram_drills_into_one_level_and_returns_to_its_container() {
 }
 
 #[test]
-fn delivery_roles_request_diagrams_only_after_implementation() {
+fn delivery_roles_leave_diagrams_opt_in() {
     let planner = include_str!("../roles/planner.md");
     let implementer = include_str!("../roles/implementer.md");
     assert!(planner.contains("Do not generate UML during planning"));
     assert!(!planner.contains("miau-graph"));
-    assert!(implementer.contains("observed"));
-    assert!(implementer.contains("miau-graph"));
+    assert!(implementer.contains("only when the workflow step or task explicitly requests one"));
 }
 
 #[test]

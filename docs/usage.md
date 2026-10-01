@@ -116,8 +116,8 @@ session. Planning and implementation revisions must return the full updated docu
 Given/When/Then scenarios; verification results belong in Implemented plan. This structure lives in the run artifact
 and does not require creating project files under `specs/`. These are agent instructions, not an automatic completeness
 check: inspect the document and request changes at the human gate if the agent omits required content.
-The output contract requests UML only after implementation, covering the whole change in one observed class diagram.
-A `miau-graph` block in Handoff adds the interactive [Diagram view](diagrams.md), with member compartments and connected
+The output contract requests UML only when the workflow step or task explicitly asks for it. A `miau-graph` block in
+Handoff adds the interactive [Diagram view](diagrams.md), with member compartments and connected
 arrows on a stable canvas. Press `g` to open it directly; pan with `H`/`J`/`K`/`L` when the graph exceeds the viewport.
 Left/Right browses workflow steps. Select classes with `j`/`k`,
 cycle relationships with `}`, follow one with Enter, and return with Backspace. Press `n` to save a note on an element,

@@ -9,7 +9,7 @@ parser = "claude"
 [codex]
 bin = "codex"
 effort = "medium"
-args = ["exec", "--json", "--model", "gpt-6-sol", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"]
+args = ["exec", "--json", "--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"]
 resume_args = ["resume", "{session}"]
 resume_insert_at = 1
 schema_args = ["--output-schema", "{schema}"]
