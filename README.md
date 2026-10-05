@@ -36,7 +36,7 @@ Enter to save, and `s` to start the step. After each agent finishes, choose what
 | `f` | Finish the run after confirmation, skipping unfinished steps. |
 | `b` | Return to the run list once the agent has stopped. |
 
-Run data stays in the project's `miaus/` directory. Revisions preserve prior artifact versions, and later agents read
+Run data stays in the project's `.miaus/` directory. Revisions preserve prior artifact versions, and later agents read
 current artifact files from disk. See the [usage guide](docs/usage.md) for prompt editing, discussions, navigation,
 and revisiting steps.
 
@@ -85,7 +85,7 @@ Customize agent commands, workflow steps, roles, and session reuse in the [confi
 For project-specific configuration, override the paths:
 
 ```sh
-miau --agents ./miau-config/agents.toml --workflow ./miau-config/workflow.toml --roles ./miau-config/roles --runs ./miaus
+miau --agents ./miau-config/agents.toml --workflow ./miau-config/workflow.toml --roles ./miau-config/roles --runs ./.miaus
 ```
 
 ## Development

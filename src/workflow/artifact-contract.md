@@ -50,14 +50,25 @@ copying unrelated upstream detail. A file list with short purposes is sufficient
 mandatory A/M/D/R tree.
 
 For critique/review, use `## Findings`, `## Verification`, and `## References` in Review
-instead of rewriting the feature. Prioritize discrepancies and risks with severity,
-concrete evidence, and affected behavior or acceptance IDs. State when no findings exist,
+instead of rewriting the feature. For every discrepancy or risk, include these separate assessments:
+
+- Severity: critical, high, medium, or low — the impact if the issue occurs, naming affected behavior or acceptance IDs.
+- Likelihood: high, medium, low, or unknown — the chance the issue occurs when the proposed plan is implemented
+  (critique) or the implementation is applied and used (review). High means expected in normal use; medium means
+  plausible under specific conditions; low means unlikely or requiring unusual conditions. Use unknown when evidence
+  is insufficient, and state what information or verification is missing.
+- Trigger conditions: the inputs, environment, or sequence of actions needed for the issue to occur.
+- Evidence: concrete support for both severity and likelihood, distinguishing observed failures from inferred risks
+  and stating assumptions. Do not confuse likelihood with confidence that the finding is correct.
+
+Do not invent numerical probabilities. Consider severity and likelihood together when prioritizing findings for the
+operator; keep both visible, including severe issues with low or unknown likelihood. State when no findings exist,
 what was inspected, and any verification limitations. Custom roles should use the feature
 structure when specifying or delivering behavior, or the findings structure when assessing it.
 
 Human decisions remain with the operator. Put any required decisions directly in Review
 using the decision format below, before the feature sections or findings so blockers are
-visible first. Reference the finding's severity/evidence in the decision context when
+visible first. Reference the finding's severity, likelihood, and evidence in the decision context when
 applicable. Recommending an option is allowed; approving or rejecting the workflow step
 belongs to the operator.
 

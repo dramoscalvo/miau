@@ -33,7 +33,7 @@ test('installed Rust command runs the real compiler and emits a reproducible Mar
   assert.match(broken.stderr, /unresolved import/);
   assert.equal(broken.stdout, '');
   assert(!fs.existsSync(path.join(root, 'failed.md')));
-  assert(!fs.existsSync(path.join(root, 'miaus')));
+  assert(!fs.existsSync(path.join(root, '.miaus')));
 });
 
 test('module scope is the default and type scope selects semantic extraction', t => {

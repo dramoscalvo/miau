@@ -557,6 +557,42 @@ mod tests {
     }
 
     #[test]
+    fn assessment_prompts_require_impact_and_likelihood_on_initial_and_resumed_attempts() {
+        let root =
+            std::env::temp_dir().join(format!("miau-assessment-prompts-{}", std::process::id()));
+        fs::create_dir_all(root.join("roles")).unwrap();
+        fs::write(root.join("roles/custom.md"), "Assess the changes.").unwrap();
+        let orchestrator =
+            Orchestrator::new(FileRepository::new(root.join("runs")), root.join("roles"));
+        for step in ["critique", "review"] {
+            for attempts in [1, 2] {
+                let mut run = fixture(&root);
+                let node = &mut run.nodes[1];
+                node.name = step.into();
+                node.role = "custom".into();
+                node.attempts = attempts;
+                node.session_id = (attempts > 1).then(|| "existing-session".into());
+                let prompt = orchestrator.assemble_prompt(&run, None).unwrap();
+                for requirement in [
+                    "Severity: critical, high, medium, or low",
+                    "Likelihood: high, medium, low, or unknown",
+                    "Trigger conditions:",
+                    "Evidence:",
+                    "Do not confuse likelihood with confidence",
+                    "Do not invent numerical probabilities",
+                    "Consider severity and likelihood together",
+                ] {
+                    assert!(
+                        prompt.contains(requirement),
+                        "{step}/attempt {attempts}: missing {requirement}"
+                    );
+                }
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn plan_prompt_requests_the_minimal_implementation_for_the_goal() {
         let root = std::env::temp_dir().join(format!("miau-plan-prompt-{}", std::process::id()));
         fs::create_dir_all(root.join("roles")).unwrap();

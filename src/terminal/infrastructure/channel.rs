@@ -67,7 +67,10 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, run: Option<&Run>, scroll: u16,
     let scroll = tail_scroll_for_paragraph(&paragraph, area, scroll);
     frame.render_widget(
         paragraph
-            .block(pane::block(" Activity ", focus == Focus::Channel))
+            .block(pane::block(
+                " Activity · c references ",
+                focus == Focus::Channel,
+            ))
             .scroll((scroll, 0)),
         area,
     );

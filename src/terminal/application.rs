@@ -155,6 +155,9 @@ pub struct Model {
     pub viewed_node: usize,
     pub flow_scroll: u16,
     pub channel_scroll: u16,
+    pub references_open: bool,
+    pub reference_node: usize,
+    pub reference_scroll: u16,
     pub detail_view: DetailView,
     pub change_selected: usize,
     pub change_scroll: u16,
@@ -186,6 +189,9 @@ impl Default for Model {
             viewed_node: 0,
             flow_scroll: 0,
             channel_scroll: 0,
+            references_open: false,
+            reference_node: 0,
+            reference_scroll: 0,
             detail_view: DetailView::Review,
             change_selected: 0,
             change_scroll: 0,
@@ -204,6 +210,11 @@ impl Default for Model {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
+    ToggleReferences,
+    PreviousReference,
+    NextReference {
+        last: usize,
+    },
     DiagramPrevious,
     DiagramNext,
     DiagramChild,
@@ -393,6 +404,9 @@ impl Model {
         self.focus = Focus::Flow;
         self.flow_scroll = 0;
         self.channel_scroll = 0;
+        self.references_open = false;
+        self.reference_node = 0;
+        self.reference_scroll = 0;
         self.detail_view = DetailView::Review;
         self.change_selected = 0;
         self.change_scroll = 0;
@@ -460,6 +474,15 @@ impl Model {
 
     pub fn update(&mut self, message: Message) {
         match message {
+            Message::ToggleReferences => self.references_open = !self.references_open,
+            Message::PreviousReference => {
+                self.reference_node = self.reference_node.saturating_sub(1);
+                self.reference_scroll = 0;
+            }
+            Message::NextReference { last } => {
+                self.reference_node = (self.reference_node + 1).min(last);
+                self.reference_scroll = 0;
+            }
             Message::DiagramPrevious => {
                 self.diagram.move_selection(false);
                 self.flow_scroll = 0;
@@ -525,6 +548,13 @@ impl Model {
                         self.flow_scroll.saturating_sub(delta.unsigned_abs())
                     } else {
                         self.flow_scroll.saturating_add(delta as u16)
+                    };
+                }
+                Focus::Channel if self.references_open => {
+                    self.reference_scroll = if delta < 0 {
+                        self.reference_scroll.saturating_sub(delta.unsigned_abs())
+                    } else {
+                        self.reference_scroll.saturating_add(delta as u16)
                     };
                 }
                 Focus::Channel => {
@@ -983,6 +1013,66 @@ fn prompt_word_text_object_range(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn references_browse_and_scroll_independently_of_the_main_document() {
+        let mut model = Model {
+            viewed_node: 3,
+            flow_scroll: 7,
+            ..Model::default()
+        };
+        model.update(Message::ToggleReferences);
+        model.update(Message::NextReference { last: 2 });
+        model.focus = Focus::Channel;
+        model.update(Message::Scroll(10));
+        assert_eq!(
+            (
+                model.reference_node,
+                model.reference_scroll,
+                model.viewed_node,
+                model.flow_scroll
+            ),
+            (1, 10, 3, 7)
+        );
+        model.update(Message::NextReference { last: 2 });
+        model.update(Message::NextReference { last: 2 });
+        assert_eq!((model.reference_node, model.reference_scroll), (2, 0));
+        model.update(Message::PreviousReference);
+        model.update(Message::PreviousReference);
+        model.update(Message::PreviousReference);
+        assert_eq!(model.reference_node, 0);
+    }
+
+    #[test]
+    fn toggling_activity_preserves_reference_position_and_run_list_clears_it() {
+        let mut model = Model {
+            references_open: true,
+            reference_node: 2,
+            reference_scroll: 9,
+            channel_scroll: 4,
+            ..Model::default()
+        };
+        model.update(Message::ToggleReferences);
+        assert!(!model.references_open);
+        model.update(Message::ToggleReferences);
+        assert_eq!(
+            (
+                model.reference_node,
+                model.reference_scroll,
+                model.channel_scroll
+            ),
+            (2, 9, 4)
+        );
+        model.return_to_run_list();
+        assert_eq!(
+            (
+                model.references_open,
+                model.reference_node,
+                model.reference_scroll
+            ),
+            (false, 0, 0)
+        );
+    }
+
     #[test]
     fn decisions_become_default_and_cycle_back_from_changes() {
         let mut model = super::Model::default();

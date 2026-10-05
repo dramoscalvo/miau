@@ -237,7 +237,9 @@ fn all_hints(view: &HelpView<'_>) -> String {
             DetailView::Artifact => "v changes · PgUp/PgDn document",
             DetailView::Changes => "v next view · j/k files · PgUp/PgDn diff",
         };
-        hints = format!("{hints} · {view_hints}");
+        hints = format!(
+            "{hints} · {view_hints} · c activity/references · Tab then ←/→ reference step · R reload focused reference"
+        );
     }
     hints
 }

@@ -45,7 +45,7 @@ fn help_identifies_the_executable_as_miau() {
 }
 
 #[test]
-fn help_shows_miaus_as_the_default_run_directory() {
+fn help_shows_dot_miaus_as_the_default_run_directory() {
     let output = Command::new(env!("CARGO_BIN_EXE_miau"))
         .arg("--help")
         .output()
@@ -55,6 +55,6 @@ fn help_shows_miaus_as_the_default_run_directory() {
 
     assert!(stdout.lines().any(|line| {
         line.split_whitespace()
-            .eq(["--runs", "<RUNS>", "[default:", "miaus]"])
+            .eq(["--runs", "<RUNS>", "[default:", ".miaus]"])
     }));
 }

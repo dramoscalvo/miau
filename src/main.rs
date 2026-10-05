@@ -28,7 +28,7 @@ use std::{
     about = "Human-gated coding-agent orchestrator"
 )]
 struct Cli {
-    #[arg(long, default_value = "miaus")]
+    #[arg(long, default_value = ".miaus")]
     runs: PathBuf,
     #[arg(long)]
     agents: Option<PathBuf>,

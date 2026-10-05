@@ -59,6 +59,13 @@ runs. Findings that require a human choice must include a decision in Review. Re
 remains with the operator. Agents blocked on an answer should return an artifact with open decisions before continuing
 dependent work. Free-form questions and native CLI question tools do not create miau answer fields.
 
+Critique and review findings report severity (impact) separately from likelihood (chance of occurrence when the plan is
+implemented or the implementation is applied and used). Each finding includes trigger conditions and evidence for both
+assessments. Likelihood is high for expected issues in normal use, medium for plausible issues under specific conditions,
+low for unlikely issues requiring unusual conditions, or unknown when evidence is insufficient. Unknown assessments
+identify missing information or verification. These qualitative ratings help you prioritize findings; they never approve,
+reject, or advance a workflow step. The shared output contract supplies this guidance even for existing customized roles.
+
 The output contract includes this decision format:
 
 ```markdown
@@ -136,6 +143,16 @@ The live Git tree marks added files in green, modified files in yellow, deleted 
 Use `j`/`k` or Up/Down to select a file and Page Up/Page Down to scroll its unified diff. This view reports all current
 working-tree changes, including changes that existed before the run; it does not yet attribute files to an individual
 run or workflow step.
+
+Press `c` to switch the right pane between **Activity** and **References**. References shows a saved workflow document
+in full, including plan points, critique findings, review findings, and decision IDs such as `D1` or `BR-3`. Press Tab to
+focus that pane, then Left/Right to choose its step and Up/Down or Page Up/Page Down to scroll. The main document stays
+in place for comparison. Tab back to the main pane to browse its steps independently. The reference step and scroll
+position remain when switching to Activity and back; opening another run resets them.
+
+The reference header identifies the step and artifact filename. `R` reloads the focused reference from disk; references
+also reload after editor/discussion handoffs and when step output is saved. Steps without a saved artifact show an empty
+state. References displays the current saved artifact, with manual browsing rather than automatic ID resolution.
 
 The Activity pane follows the newest activity by default. Press Tab to focus it, then use Up, Down, Page Up, or Page
 Down to browse its history; scrolling down returns toward the latest entry.

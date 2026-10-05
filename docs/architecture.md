@@ -16,7 +16,7 @@ infrastructure.
 
 `workflow` owns declarative workflow nodes and the human-gated orchestration
 use case. Prompt assembly reads role/spec/artifact content through repository
-ports. Severity in critique/review output is presentation data only; it must
+ports. Severity and likelihood in critique/review output are presentation data only; they must
 never control a transition.
 
 Working-tree inspection is exposed through the workflow application's

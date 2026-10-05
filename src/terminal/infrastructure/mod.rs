@@ -8,6 +8,7 @@ pub mod handoff;
 pub mod help;
 pub mod layout;
 mod pane;
+mod references;
 mod sources;
 
 use crate::{
@@ -64,6 +65,7 @@ struct App {
     runs: Vec<Run>,
     run: Option<Run>,
     artifact: String,
+    reference_artifact: String,
     stream: Vec<String>,
     agent_activity: String,
     changes: Vec<WorkingTreeChange>,
@@ -311,6 +313,7 @@ impl App {
             runs,
             run: None,
             artifact: String::new(),
+            reference_artifact: String::new(),
             stream: vec![],
             agent_activity: String::new(),
             changes: vec![],
@@ -422,7 +425,18 @@ impl App {
         Ok(())
     }
 
+    fn reload_reference(&mut self) -> Result<()> {
+        self.reference_artifact.clear();
+        if let Some(run) = &self.run
+            && let Some(node) = run.nodes.get(self.ui.reference_node)
+        {
+            self.reference_artifact = self.repository.read(&run.id, &node.writes)?;
+        }
+        Ok(())
+    }
+
     fn reload_artifact(&mut self) -> Result<()> {
+        self.reload_reference()?;
         self.artifact = match self.run.as_ref() {
             Some(run) => match run.nodes.get(self.ui.viewed_node) {
                 Some(node) => self.repository.read(&run.id, &node.writes)?,
@@ -909,6 +923,31 @@ impl App {
                 });
                 self.refresh_working_tree_if_visible();
             }
+            KeyCode::Char('c') => {
+                self.ui.update(Message::ToggleReferences);
+                self.reload_reference()?;
+            }
+            KeyCode::Left | KeyCode::Right
+                if self.ui.references_open
+                    && self.ui.focus == crate::terminal::application::Focus::Channel =>
+            {
+                let last = self
+                    .run
+                    .as_ref()
+                    .map_or(0, |run| run.nodes.len().saturating_sub(1));
+                self.ui.update(if code == KeyCode::Left {
+                    Message::PreviousReference
+                } else {
+                    Message::NextReference { last }
+                });
+                self.reload_reference()?;
+            }
+            KeyCode::Char('R')
+                if self.ui.references_open
+                    && self.ui.focus == crate::terminal::application::Focus::Channel =>
+            {
+                self.reload_reference()?;
+            }
             KeyCode::Left => self.browse_node(false)?,
             KeyCode::Right => self.browse_node(true)?,
             KeyCode::Tab => self.ui.update(Message::ToggleFocus),
@@ -1276,6 +1315,8 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
     let prompt = matches!(app.ui.mode, Mode::Prompt(_)).then_some(app.ui.prompt.as_str());
     let areas = if matches!(app.ui.mode, Mode::RunList) {
         layout::run_list_areas(frame.area())
+    } else if app.ui.references_open {
+        layout::reference_areas(frame.area(), prompt)
     } else {
         layout::areas(frame.area(), prompt)
     };
@@ -1329,13 +1370,23 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
                 .map_or("", |node| node.name.as_str());
             diagram::render(frame, areas.flow, &app.ui, step);
         }
-        channel::render(
-            frame,
-            areas.channel,
-            app.run.as_ref(),
-            app.ui.channel_scroll,
-            app.ui.focus,
-        );
+        if app.ui.references_open {
+            references::render(
+                frame,
+                areas.channel,
+                app.run.as_ref(),
+                &app.reference_artifact,
+                &mut app.ui,
+            );
+        } else {
+            channel::render(
+                frame,
+                areas.channel,
+                app.run.as_ref(),
+                app.ui.channel_scroll,
+                app.ui.focus,
+            );
+        }
     }
     let help_view = help::HelpView {
         mode: &app.ui.mode,

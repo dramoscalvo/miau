@@ -152,5 +152,5 @@ miau \
   --agents ./miau-config/agents.toml \
   --workflow ./miau-config/workflow.toml \
   --roles ./miau-config/roles \
-  --runs ./miaus
+  --runs ./.miaus
 ```

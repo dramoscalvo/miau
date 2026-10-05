@@ -31,6 +31,16 @@ pub fn areas(area: Rect, prompt: Option<&str>) -> Areas {
     }
 }
 
+pub fn reference_areas(area: Rect, prompt: Option<&str>) -> Areas {
+    let mut areas = areas(area, prompt);
+    let body = Rect::new(area.x, area.y, area.width, areas.flow.height);
+    let [flow, channel] =
+        Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).areas(body);
+    areas.flow = flow;
+    areas.channel = channel;
+    areas
+}
+
 pub fn run_list_areas(area: Rect) -> Areas {
     let [body, help] = Layout::default()
         .direction(Direction::Vertical)
@@ -51,6 +61,15 @@ pub fn run_list_areas(area: Rect) -> Areas {
 mod tests {
     use super::{areas, run_list_areas};
     use ratatui::layout::Rect;
+
+    #[test]
+    fn references_have_space_for_side_by_side_reading() {
+        let areas = super::reference_areas(Rect::new(0, 0, 100, 24), None);
+        assert_eq!(
+            (areas.flow.width, areas.channel.width, areas.help.height),
+            (60, 40, 2)
+        );
+    }
 
     #[test]
     fn footer_reserves_only_two_rows() {

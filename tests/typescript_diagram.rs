@@ -59,7 +59,7 @@ fn typescript_command_generates_viewable_artifact_and_preserves_existing_output(
             fs::read_to_string(root.join("diagram.md")).unwrap(),
             artifact
         );
-        assert!(!root.join("miaus").exists());
+        assert!(!root.join(".miaus").exists());
     }
     fs::remove_dir_all(root).unwrap();
 }

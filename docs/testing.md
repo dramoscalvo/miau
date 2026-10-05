@@ -70,4 +70,4 @@ compiler module resolution, evidence, unsupported syntax, repeatability across
 checkout paths, provenance changes, and installed-command output preservation.
 
 When a test needs a temporary directory, use a unique path and clean it up at
-the end of that test. Never clean a real `miaus/` directory as part of tests.
+the end of that test. Never clean a real `.miaus/` directory as part of tests.

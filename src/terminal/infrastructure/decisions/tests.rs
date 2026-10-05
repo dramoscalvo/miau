@@ -224,3 +224,68 @@ fn decision_screen_renders_questions_and_answer_on_small_and_regular_terminals()
         }
     }
 }
+
+#[test]
+fn reference_reload_reads_disk_without_changing_the_main_document_or_decisions() {
+    let mut fixture = Fixture::new();
+    fixture.app.ui.references_open = true;
+    fixture
+        .app
+        .repository
+        .write(
+            "001",
+            "plan.md",
+            "D1: Updated on disk.\nBR-3: Keep audit records.",
+        )
+        .unwrap();
+    fixture.app.reload_reference().unwrap();
+    assert_eq!(
+        fixture.app.reference_artifact,
+        "D1: Updated on disk.\nBR-3: Keep audit records."
+    );
+    assert_eq!(fixture.app.artifact, DOCUMENT);
+    assert_eq!(fixture.app.ui.questions.len(), 2);
+    fixture.app.reload_artifact().unwrap();
+    assert_eq!(fixture.app.reference_artifact, fixture.app.artifact);
+    fs::remove_file(fixture.app.repository.path("001", "plan.md").unwrap()).unwrap();
+    fixture.app.reload_reference().unwrap();
+    assert!(fixture.app.reference_artifact.is_empty());
+}
+
+#[test]
+fn reference_and_main_document_render_different_steps_together() {
+    let mut fixture = Fixture::new();
+    let run = fixture.app.run.as_mut().unwrap();
+    let mut critique = run.nodes[0].clone();
+    critique.name = "critique".into();
+    critique.writes = "critique.md".into();
+    run.nodes.push(critique);
+    fixture
+        .app
+        .repository
+        .write(
+            "001",
+            "critique.md",
+            "BR-3: Reconsider the retention policy.",
+        )
+        .unwrap();
+    fixture.app.ui.references_open = true;
+    fixture.app.browse_node(true).unwrap();
+    let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(140, 30)).unwrap();
+    terminal
+        .draw(|frame| draw(frame, &mut fixture.app))
+        .unwrap();
+    let text: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(text.contains("BR-3: Reconsider the retention policy."));
+    assert!(text.contains("D1: Storage?"));
+    assert!(text.contains("plan.md"));
+    assert_eq!(fixture.app.ui.viewed_node, 1);
+    assert_eq!(fixture.app.ui.reference_node, 0);
+    assert!(fixture.app.running.is_none());
+}
