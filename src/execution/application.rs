@@ -24,6 +24,14 @@ pub struct AgentConfig {
 }
 
 impl AgentConfig {
+    /// Model explicitly requested by the configured command, which may be an alias.
+    pub fn model(&self) -> Option<&str> {
+        self.args
+            .windows(2)
+            .find(|pair| pair[0] == "--model")
+            .map(|pair| pair[1].as_str())
+    }
+
     pub fn effort(&self) -> Option<&str> {
         self.effort.as_deref().or_else(|| {
             self.args

@@ -15,7 +15,7 @@ includes Claude Code and Codex examples:
 [claude]
 bin = "claude"
 effort = "high"
-args = ["--model", "opus-5.5", "--effort", "{effort}", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
+args = ["--model", "claude-opus-5-5", "--effort", "{effort}", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
 resume_args = ["--resume", "{session}"]
 discuss_args = ["--resume", "{session}"]
 parser = "claude"
@@ -36,6 +36,11 @@ parser = "codex"
 list and selected-run summary. Existing configurations without that field remain compatible; miau recognizes Claude's
 `--effort` argument and Codex's `model_reasoning_effort` override. The `parser` must currently be either `claude` or
 `codex`.
+
+The main run list and selected-run summary also show the model supplied through `--model` in the agent's `args`.
+This is the requested model from the loaded configuration, including aliases such as `opus`; it is not a model
+version confirmed by the provider or a historical record of earlier attempts. Restart miau after changing the file.
+When no explicit model is configured, the label shows only the agent and any configured effort.
 
 ## Configure the workflow
 

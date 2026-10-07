@@ -120,9 +120,13 @@ fn completed_nodes(run: &Run) -> usize {
 }
 
 fn node_agent_label(node: &Node, agents: &HashMap<String, AgentConfig>) -> String {
+    let mut label = format!("{} · {}", node.name, node.agent);
+    if let Some(model) = agents.get(&node.agent).and_then(AgentConfig::model) {
+        label.push_str(&format!(" · {model}"));
+    }
     match agents.get(&node.agent).and_then(AgentConfig::effort) {
-        Some(effort) => format!("{} · {} · {effort} effort", node.name, node.agent),
-        None => format!("{} · {}", node.name, node.agent),
+        Some(effort) => format!("{label} · {effort} effort"),
+        None => label,
     }
 }
 
@@ -796,6 +800,25 @@ mod tests {
                 parser: "codex".into(),
             },
         )])
+    }
+
+    #[test]
+    fn agent_label_includes_configured_model_with_optional_effort() {
+        use super::node_agent_label;
+        let run = run_with_status(NodeStatus::Running);
+        let node = &run.nodes[run.cursor];
+        let mut agents = agent_configs();
+        agents.get_mut("codex").unwrap().args = vec!["--model".into(), "example-model".into()];
+        assert_eq!(
+            node_agent_label(node, &agents),
+            "review · codex · example-model · medium effort"
+        );
+        agents.get_mut("codex").unwrap().effort = None;
+        assert_eq!(
+            node_agent_label(node, &agents),
+            "review · codex · example-model"
+        );
+        assert_eq!(node_agent_label(node, &HashMap::new()), "review · codex");
     }
 
     #[test]
