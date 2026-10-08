@@ -4,7 +4,17 @@
 
 The initial screen summarizes each run's status, project, current workflow step, progress, and latest activity time.
 Moving the selection updates the detail pane with the next human action, current attempt and duration, and recent
-activity. Press `n` to create a run, or Enter to open the selected run.
+activity. Use Up/Down or `j`/`k` to move one run, Page Up/Page Down to move ten, and `g`/`G` or Home/End to jump to
+the first or last run. Runs sort by ID, so `G` selects the newest run. To open a run by ID, type its number and press
+Enter; leading zeros are optional, so `1` opens run `001`. The selection follows each digit, and the list title shows
+the typed ID or reports that no run matches. Backspace removes a digit, and Esc or any movement key clears the ID.
+Press `n` to create a run, or Enter to open the selected run.
+
+Each run can have a title, which the list and the selected-run pane show next to its ID. When a step starts for the
+first time with an initial prompt, an untitled run takes the first nonblank line of that prompt as its title, without
+leading `#` characters and limited to 80 columns. Press `t` on the run list to set or change the selected run's title in
+the bottom bar; Enter saves it to `state.json`, Esc discards the change, and saving a blank title removes it. Runs
+created before titles existed stay untitled until you name them with `t`.
 
 The bottom bar shows the main actions for the current screen. Press `?` to open the full shortcut popup, or `F1`
 while typing in a prompt. Scroll help with Up/Down or Page Up/Page Down; `Esc`, `?`, or `F1` closes it. Help leaves
@@ -153,6 +163,12 @@ position remain when switching to Activity and back; opening another run resets 
 The reference header identifies the step and artifact filename. `R` reloads the focused reference from disk; references
 also reload after editor/discussion handoffs and when step output is saved. Steps without a saved artifact show an empty
 state. References displays the current saved artifact, with manual browsing rather than automatic ID resolution.
+
+Press `/` while a run is open to fuzzy-find across every step's saved artifact. Type space-separated terms in any order,
+such as `br3 audit`; each term must match the line as a case-insensitive subsequence. Up/Down or Ctrl-p/Ctrl-n select
+a result, Enter opens References at that step, scrolls the line to the top, and highlights it, and Esc closes the
+finder. Results also include each step by name and artifact filename. The finder reads artifacts from disk when it
+opens; choosing a result reloads that artifact again, so a line edited in between may shift.
 
 The Activity pane follows the newest activity by default. Press Tab to focus it, then use Up, Down, Page Up, or Page
 Down to browse its history; scrolling down returns toward the latest entry.

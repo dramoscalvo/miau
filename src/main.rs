@@ -296,6 +296,7 @@ async fn debug_run(
     };
     let mut run = Run {
         id: args.id.clone(),
+        title: None,
         project: args.cwd.clone(),
         spec: None,
         nodes: vec![node],

@@ -31,6 +31,7 @@ fn critique_questions_from_both_providers_reach_answer_fields_and_revision_feedb
         let orchestrator = Orchestrator::new(repo, "roles");
         let mut run = Run {
             id: "001".into(),
+            title: None,
             project: root.clone(),
             spec: None,
             cursor: 0,

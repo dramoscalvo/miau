@@ -371,6 +371,7 @@ mod tests {
     fn fixture(root: &Path) -> Run {
         Run {
             id: "001".into(),
+            title: None,
             project: root.into(),
             spec: None,
             cursor: 1,

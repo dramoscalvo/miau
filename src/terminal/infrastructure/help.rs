@@ -210,7 +210,10 @@ fn all_hints(view: &HelpView<'_>) -> String {
         return prompt_help(kind, view.prompt_edit_mode).1.trim().to_owned();
     }
     let mut hints = match view.mode {
-        Mode::RunList => "↑↓ select run · enter open · n new · q quit".into(),
+        Mode::RunList => {
+            "↑↓/j/k select run · g/G first/last · PgUp/PgDn page · type ID then enter open · t title · n new · q quit"
+                .into()
+        }
         Mode::Streaming => "←/→ agents · tab pane · ↑↓ scroll · x stop · q quit".into(),
         Mode::Gate => gate_text(
             view.status,
@@ -238,7 +241,7 @@ fn all_hints(view: &HelpView<'_>) -> String {
             DetailView::Changes => "v next view · j/k files · PgUp/PgDn diff",
         };
         hints = format!(
-            "{hints} · {view_hints} · c activity/references · Tab then ←/→ reference step · R reload focused reference"
+            "{hints} · {view_hints} · c activity/references · / find reference · Tab then ←/→ reference step · R reload focused reference"
         );
     }
     hints
@@ -246,7 +249,7 @@ fn all_hints(view: &HelpView<'_>) -> String {
 
 fn compact_hints(view: &HelpView<'_>) -> String {
     let hints = match view.mode {
-        Mode::RunList => "enter open · n new · q quit".to_owned(),
+        Mode::RunList => "G latest · enter open · n new · q quit".to_owned(),
         Mode::Streaming => "x stop · v view".to_owned(),
         Mode::Confirm(action) => return confirmation_text(action).to_owned(),
         Mode::Gate => {

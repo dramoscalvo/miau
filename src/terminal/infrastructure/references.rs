@@ -8,8 +8,8 @@ use crate::{
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::Stylize,
-    text::Line,
+    style::{Style, Stylize},
+    text::{Line, Text},
     widgets::{Paragraph, Wrap},
 };
 
@@ -34,18 +34,51 @@ pub fn render(
         Paragraph::new(vec![
             Line::from(title).cyan().bold(),
             Line::from(node.map_or("", |node| node.writes.as_str())).dim(),
-            Line::from("Tab focus · ←/→ step · ↑↓ scroll · R reload").dim(),
+            Line::from("/ find · Tab focus · ←/→ step · ↑↓ scroll · R reload").dim(),
         ]),
         heading,
     );
+    let target = model.reference_target;
     let text = if artifact.trim().is_empty() {
-        "No saved artifact for this step yet."
+        Text::from("No saved artifact for this step yet.")
     } else {
-        artifact
+        Text::from(
+            artifact
+                .lines()
+                .enumerate()
+                .map(|(index, line)| {
+                    let line = Line::from(line);
+                    if target.is_some_and(|target| target.line == index) {
+                        line.style(Style::default().yellow().bold())
+                    } else {
+                        line
+                    }
+                })
+                .collect::<Vec<_>>(),
+        )
     };
+    let width = body.width.max(1);
+    if let Some(target) = model.reference_target.as_mut()
+        && target.pending_scroll
+    {
+        let before = Paragraph::new(
+            text.lines
+                .get(..target.line)
+                .unwrap_or(&text.lines)
+                .to_vec(),
+        )
+        .wrap(Wrap { trim: false });
+        let offset = if target.line == 0 {
+            0
+        } else {
+            before.line_count(width)
+        };
+        model.reference_scroll = u16::try_from(offset).unwrap_or(u16::MAX);
+        target.pending_scroll = false;
+    }
     let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
     let max_scroll = paragraph
-        .line_count(body.width.max(1))
+        .line_count(width)
         .saturating_sub(usize::from(body.height));
     model.reference_scroll = model
         .reference_scroll
@@ -82,6 +115,34 @@ mod tests {
             .collect();
         assert!(text.contains("D1: Which database?"));
         assert!(text.contains("BR-3: Retain audit records."));
+    }
+
+    #[test]
+    fn a_found_line_is_scrolled_into_view_once_and_highlighted() {
+        let mut terminal = Terminal::new(TestBackend::new(40, 8)).unwrap();
+        let mut model = Model::default();
+        model.reference_target = Some(crate::terminal::application::reference_finder::Target {
+            line: 20,
+            pending_scroll: true,
+        });
+        let artifact: String = (0..40).map(|line| format!("line {line}\n")).collect();
+        terminal
+            .draw(|frame| render(frame, frame.area(), None, &artifact, &mut model))
+            .unwrap();
+        assert_eq!(model.reference_scroll, 20);
+        assert_eq!(
+            model.reference_target.map(|target| target.pending_scroll),
+            Some(false)
+        );
+        let buffer = terminal.backend().buffer();
+        let row: String = (0..40).map(|x| buffer[(x, 4)].symbol()).collect();
+        assert!(row.contains("line 20"), "{row}");
+        assert_eq!(buffer[(1, 4)].fg, ratatui::style::Color::Yellow);
+        model.reference_scroll = 3;
+        terminal
+            .draw(|frame| render(frame, frame.area(), None, &artifact, &mut model))
+            .unwrap();
+        assert_eq!(model.reference_scroll, 3);
     }
 
     #[test]

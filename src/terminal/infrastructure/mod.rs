@@ -8,6 +8,7 @@ pub mod handoff;
 pub mod help;
 pub mod layout;
 mod pane;
+mod reference_finder;
 mod references;
 mod sources;
 
@@ -25,7 +26,8 @@ use crate::{
     terminal::application::{
         Action, DetailView, Message, Mode, Model, PromptEditMode, PromptKind, PromptOperator,
         PromptPendingCommand, PromptTextObject, PromptWordStyle, SubmittedPrompt, artifact_review,
-        diagram::SourceRepository,
+        diagram::SourceRepository, matching_run,
+        reference_finder::entries as reference_finder_entries,
     },
     workflow::{
         application::{Orchestrator, WorkingTreeRepository, decisions::Drafts},
@@ -94,15 +96,51 @@ fn handle_help_key(ui: &mut Model, key: KeyEvent) -> bool {
         }
         return true;
     }
-    let typing = matches!(ui.mode, Mode::Prompt(_))
-        && (ui.prompt_edit_mode == PromptEditMode::Insert
-            || ui.mode == Mode::Prompt(PromptKind::Answer));
+    let typing = ui.reference_finder.is_some()
+        || ui.run_title_draft.is_some()
+        || matches!(ui.mode, Mode::Prompt(_))
+            && (ui.prompt_edit_mode == PromptEditMode::Insert
+                || ui.mode == Mode::Prompt(PromptKind::Answer));
     if key.code == KeyCode::F(1) || (key.code == KeyCode::Char('?') && !typing) {
         ui.help_open = true;
         ui.help_scroll = 0;
         return true;
     }
     false
+}
+
+fn reference_finder_message(key: KeyEvent) -> Option<Message> {
+    let control = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        KeyCode::Esc => Some(Message::CloseReferenceFinder),
+        KeyCode::Enter => Some(Message::ChooseReference),
+        KeyCode::Up => Some(Message::ReferenceFinderPrevious),
+        KeyCode::Down => Some(Message::ReferenceFinderNext),
+        KeyCode::Char('p' | 'k') if control => Some(Message::ReferenceFinderPrevious),
+        KeyCode::Char('n' | 'j') if control => Some(Message::ReferenceFinderNext),
+        KeyCode::Backspace => Some(Message::ReferenceFinderBackspace),
+        KeyCode::Char(character) if !control && !key.modifiers.contains(KeyModifiers::ALT) => {
+            Some(Message::ReferenceFinderInput(character))
+        }
+        _ => None,
+    }
+}
+
+/// Keys for the one-line run title editor; Esc discards the draft and Enter is handled by the caller.
+fn run_title_message(key: KeyEvent) -> Option<Message> {
+    let modified = key
+        .modifiers
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+    match key.code {
+        KeyCode::Esc => Some(Message::CancelRunTitle),
+        KeyCode::Backspace => Some(Message::RunTitleBackspace),
+        KeyCode::Char(character) if !modified => Some(Message::RunTitleInput(character)),
+        _ => None,
+    }
+}
+
+fn opens_reference_finder(code: KeyCode, mode: &Mode) -> bool {
+    code == KeyCode::Char('/') && matches!(mode, Mode::Gate | Mode::Streaming)
 }
 
 fn returns_to_run_list(code: KeyCode, mode: &Mode) -> bool {
@@ -357,6 +395,7 @@ impl App {
             .collect();
         let run = Run {
             id: format!("{next:03}"),
+            title: None,
             project: std::env::current_dir()?,
             spec: None,
             nodes,
@@ -368,6 +407,21 @@ impl App {
         self.runs.push(run);
         self.ui.selected = self.runs.len().saturating_sub(1);
         self.open_selected()
+    }
+
+    /// Save the typed title on the selected run, reloading it so other fields stay canonical.
+    fn rename_selected(&mut self) -> Result<()> {
+        let Some(title) = self.ui.run_title_draft.take() else {
+            return Ok(());
+        };
+        let Some(listed) = self.runs.get_mut(self.ui.selected) else {
+            return Ok(());
+        };
+        let mut run = self.repository.load(&listed.id)?;
+        run.rename(&title);
+        self.repository.save(&run)?;
+        *listed = run;
+        Ok(())
     }
 
     fn open_selected(&mut self) -> Result<()> {
@@ -432,6 +486,24 @@ impl App {
         {
             self.reference_artifact = self.repository.read(&run.id, &node.writes)?;
         }
+        Ok(())
+    }
+
+    /// Read every step's artifact from disk so the finder never searches stale text.
+    fn open_reference_finder(&mut self) -> Result<()> {
+        let Some(run) = &self.run else {
+            return Ok(());
+        };
+        let artifacts = run
+            .nodes
+            .iter()
+            .map(|node| self.repository.read(&run.id, &node.writes))
+            .collect::<Result<Vec<_>, _>>()?;
+        let entries =
+            reference_finder_entries(run.nodes.iter().zip(&artifacts).map(|(node, artifact)| {
+                (node.name.as_str(), node.writes.as_str(), artifact.as_str())
+            }));
+        self.ui.update(Message::OpenReferenceFinder(entries));
         Ok(())
     }
 
@@ -676,6 +748,11 @@ impl App {
             .orchestrator
             .session_for_current(run)
             .map(str::to_owned);
+        if node.attempts == 0
+            && let Some(prompt) = pending_prompt.as_deref()
+        {
+            run.name_from_prompt(prompt);
+        }
         self.orchestrator.begin(run)?;
         self.ui.viewed_node = run.cursor;
         let request = Request {
@@ -798,6 +875,24 @@ impl App {
         if handle_help_key(&mut self.ui, key) {
             return Ok(false);
         }
+        if self.ui.reference_finder.is_some() {
+            if let Some(message) = reference_finder_message(key) {
+                let choose = message == Message::ChooseReference;
+                self.ui.update(message);
+                if choose && self.ui.reference_finder.is_none() {
+                    self.reload_reference()?;
+                }
+            }
+            return Ok(false);
+        }
+        if self.ui.run_title_draft.is_some() {
+            if key.code == KeyCode::Enter {
+                self.rename_selected()?;
+            } else if let Some(message) = run_title_message(key) {
+                self.ui.update(message);
+            }
+            return Ok(false);
+        }
         let code = key.code;
         match &self.ui.mode {
             Mode::Confirm(action) => {
@@ -894,13 +989,44 @@ impl App {
             return Ok(false);
         }
         if matches!(self.ui.mode, Mode::RunList) {
+            let last = self.runs.len().saturating_sub(1);
+            let ids = || self.runs.iter().map(|run| run.id.clone()).collect();
+            match code {
+                KeyCode::Char(character) if character.is_ascii_digit() => {
+                    self.ui.update(Message::RunIdInput {
+                        character,
+                        ids: ids(),
+                    });
+                    return Ok(false);
+                }
+                KeyCode::Backspace if !self.ui.run_id_query.is_empty() => {
+                    self.ui.update(Message::RunIdBackspace { ids: ids() });
+                    return Ok(false);
+                }
+                KeyCode::Enter if !self.ui.run_id_query.is_empty() => {
+                    let query = self.ui.run_id_query.as_str();
+                    if matching_run(self.runs.iter().map(|run| run.id.as_str()), query).is_some() {
+                        self.ui.update(Message::ClearRunIdQuery);
+                        self.open_selected()?;
+                    }
+                    return Ok(false);
+                }
+                _ => self.ui.update(Message::ClearRunIdQuery),
+            }
             match code {
                 KeyCode::Char('n') => self.create_run()?,
+                KeyCode::Char('t') => {
+                    if let Some(run) = self.runs.get(self.ui.selected) {
+                        self.ui.update(Message::EditRunTitle(run.title.clone()));
+                    }
+                }
                 KeyCode::Enter => self.open_selected()?,
-                KeyCode::Up => self.ui.update(Message::SelectPrevious),
-                KeyCode::Down => self.ui.update(Message::SelectNext {
-                    last: self.runs.len().saturating_sub(1),
-                }),
+                KeyCode::Up | KeyCode::Char('k') => self.ui.update(Message::SelectPrevious),
+                KeyCode::Down | KeyCode::Char('j') => self.ui.update(Message::SelectNext { last }),
+                KeyCode::Home | KeyCode::Char('g') => self.ui.update(Message::SelectFirst),
+                KeyCode::End | KeyCode::Char('G') => self.ui.update(Message::SelectLast { last }),
+                KeyCode::PageUp => self.ui.update(Message::SelectPageUp),
+                KeyCode::PageDown => self.ui.update(Message::SelectPageDown { last }),
                 _ => {}
             }
             return Ok(false);
@@ -923,6 +1049,7 @@ impl App {
                 });
                 self.refresh_working_tree_if_visible();
             }
+            _ if opens_reference_finder(code, &self.ui.mode) => self.open_reference_finder()?,
             KeyCode::Char('c') => {
                 self.ui.update(Message::ToggleReferences);
                 self.reload_reference()?;
@@ -1297,6 +1424,16 @@ async fn event_loop(
         tokio::select! {
             event = input.next() => if let Some(event) = event { match event? {
                 TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => if app.key(key, terminal).await? { break; },
+                TerminalEvent::Paste(text) if !app.ui.help_open && app.ui.run_title_draft.is_some() => {
+                    for character in text.chars().filter(|character| !character.is_control()) {
+                        app.ui.update(Message::RunTitleInput(character));
+                    }
+                },
+                TerminalEvent::Paste(text) if !app.ui.help_open && app.ui.reference_finder.is_some() => {
+                    for character in text.chars().filter(|character| !character.is_control()) {
+                        app.ui.update(Message::ReferenceFinderInput(character));
+                    }
+                },
                 TerminalEvent::Paste(text) if !app.ui.help_open && matches!(app.ui.mode, Mode::Prompt(_)) => {
                     app.ui.update(Message::Paste(text));
                     app.save_answer()?;
@@ -1325,7 +1462,10 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
             frame,
             areas.flow,
             &app.runs,
-            app.ui.selected,
+            flow::RunSelection {
+                index: app.ui.selected,
+                id_query: &app.ui.run_id_query,
+            },
             app.ui.focus,
             Utc::now(),
             &app.agents,
@@ -1421,6 +1561,14 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
         show_cursor: !app.ui.help_open,
     };
     help::render(frame, areas.help, &help_view);
+    if let Some(draft) = &app.ui.run_title_draft
+        && matches!(app.ui.mode, Mode::RunList)
+    {
+        flow::render_run_title_editor(frame, areas.help, draft);
+    }
+    if let Some(finder) = &app.ui.reference_finder {
+        reference_finder::render(frame, finder);
+    }
     if app.ui.help_open {
         help::render_popup(frame, &help_view, &mut app.ui.help_scroll);
     }
@@ -1466,6 +1614,70 @@ mod tests {
             &mut model,
             KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE)
         ));
+    }
+
+    #[test]
+    fn reference_finder_keys_edit_the_query_and_question_mark_is_text() {
+        let mut model = Model::default();
+        model.update(Message::OpenReferenceFinder(Vec::new()));
+        let question = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
+        assert!(!super::handle_help_key(&mut model, question));
+        assert_eq!(
+            [
+                super::reference_finder_message(question),
+                super::reference_finder_message(KeyEvent::new(
+                    KeyCode::Char('n'),
+                    KeyModifiers::CONTROL
+                )),
+                super::reference_finder_message(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+                super::reference_finder_message(KeyEvent::new(
+                    KeyCode::Char('x'),
+                    KeyModifiers::ALT
+                )),
+            ],
+            [
+                Some(Message::ReferenceFinderInput('?')),
+                Some(Message::ReferenceFinderNext),
+                Some(Message::CloseReferenceFinder),
+                None,
+            ]
+        );
+    }
+
+    #[test]
+    fn run_title_keys_treat_commands_as_text_and_esc_cancels() {
+        let mut model = Model::default();
+        model.update(Message::EditRunTitle(None));
+        let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
+        assert!(!super::handle_help_key(&mut model, key(KeyCode::Char('?'))));
+        assert_eq!(
+            [
+                super::run_title_message(key(KeyCode::Char('q'))),
+                super::run_title_message(key(KeyCode::Backspace)),
+                super::run_title_message(key(KeyCode::Esc)),
+                super::run_title_message(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            ],
+            [
+                Some(Message::RunTitleInput('q')),
+                Some(Message::RunTitleBackspace),
+                Some(Message::CancelRunTitle),
+                None,
+            ]
+        );
+    }
+
+    #[test]
+    fn slash_opens_the_reference_finder_only_inside_a_run() {
+        assert_eq!(
+            [
+                Mode::Gate,
+                Mode::Streaming,
+                Mode::RunList,
+                Mode::Prompt(PromptKind::Initial)
+            ]
+            .map(|mode| super::opens_reference_finder(KeyCode::Char('/'), &mode)),
+            [true, true, false, false]
+        );
     }
 
     #[test]
@@ -1830,6 +2042,7 @@ mod tests {
     fn run_with_nodes(nodes: Vec<Node>) -> Run {
         Run {
             id: "001".into(),
+            title: None,
             project: ".".into(),
             spec: None,
             nodes,

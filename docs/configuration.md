@@ -15,7 +15,7 @@ includes Claude Code and Codex examples:
 [claude]
 bin = "claude"
 effort = "high"
-args = ["--model", "claude-opus-5-5", "--effort", "{effort}", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
+args = ["--model", "claude-opus-5-5", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(ls:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(echo:*) Bash(pnpm test:*) Bash(pnpm lint:*) Bash(pnpm tsc:*) Bash(pnpm prettier:*) Bash(pnpm style:fix:*) Bash(pnpm build:*) Bash(node --run:*) Bash(npx jest:*) Bash(npx tsc:*) Bash(npx eslint:*) Bash(.venv/bin/pytest:*) Bash(.venv/bin/python -m pytest:*) Bash(.venv/bin/dagster definitions validate:*) Bash(pytest:*) Bash(python3 -m py_compile:*) Bash(docker compose -f /home/david/Work/odoo/docker-compose.yml run --rm odoo odoo -d test:*) Bash(rsync -a --delete --exclude=__pycache__ /home/david/Work/sn-odoo/:*)", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
 resume_args = ["--resume", "{session}"]
 discuss_args = ["--resume", "{session}"]
 parser = "claude"
@@ -50,20 +50,20 @@ its role prompt from `roles/`, and writes an artifact into the run directory:
 ```toml
 [[nodes]]
 name = "plan"
-agent = "claude"
+agent = "codex"
 role = "planner"
 writes = "plan.md"
 
 [[nodes]]
 name = "critique"
-agent = "codex"
+agent = "claude"
 session_group = "delivery"
 role = "critic"
 writes = "critique.md"
 
 [[nodes]]
 name = "implement"
-agent = "codex"
+agent = "claude"
 session_group = "delivery"
 role = "implementer"
 writes = "implementation.md"

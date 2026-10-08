@@ -9,6 +9,9 @@ use std::{path::PathBuf, time::Duration};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Run {
     pub id: String,
+    /// Short human label shown in the run list; older runs have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub project: PathBuf,
     pub spec: Option<PathBuf>,
     pub nodes: Vec<Node>,
@@ -17,7 +20,28 @@ pub struct Run {
     pub created_at: DateTime<Utc>,
 }
 
+/// Maximum display width of a title taken from an initial prompt.
+const PROMPT_TITLE_WIDTH: usize = 80;
+
 impl Run {
+    /// Name an untitled run after the first nonblank line of its initial prompt.
+    pub fn name_from_prompt(&mut self, prompt: &str) {
+        if self.title.is_some() {
+            return;
+        }
+        self.title = prompt
+            .lines()
+            .map(|line| line.trim().trim_start_matches('#').trim())
+            .find(|line| !line.is_empty())
+            .map(|line| truncate(line, PROMPT_TITLE_WIDTH));
+    }
+
+    /// Replace the title; a blank title removes it.
+    pub fn rename(&mut self, title: &str) {
+        let title = title.trim();
+        self.title = (!title.is_empty()).then(|| title.to_owned());
+    }
+
     pub fn current(&self) -> Option<&Node> {
         self.nodes.get(self.cursor)
     }
@@ -124,5 +148,54 @@ mod tests {
         .unwrap();
 
         assert_eq!(node.session_group, None);
+    }
+
+    fn run() -> Run {
+        Run {
+            id: "001".into(),
+            title: None,
+            project: PathBuf::from("/tmp/project"),
+            spec: None,
+            nodes: Vec::new(),
+            cursor: 0,
+            channel: Vec::new(),
+            created_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn initial_prompt_names_an_untitled_run_from_its_first_nonblank_line() {
+        let mut run = run();
+        run.name_from_prompt("\n  # Add CSV export  \nwith headers");
+        assert_eq!(run.title.as_deref(), Some("Add CSV export"));
+        run.name_from_prompt("Later revision");
+        assert_eq!(run.title.as_deref(), Some("Add CSV export"));
+    }
+
+    #[test]
+    fn prompt_title_is_truncated_by_display_width() {
+        let mut run = run();
+        run.name_from_prompt(&"界".repeat(60));
+        assert_eq!(run.title, Some("界".repeat(40)));
+        let mut blank = super::tests::run();
+        blank.name_from_prompt("  \n ");
+        assert_eq!(blank.title, None);
+    }
+
+    #[test]
+    fn renaming_trims_the_title_and_blank_clears_it() {
+        let mut run = run();
+        run.rename("  Fix login  ");
+        assert_eq!(run.title.as_deref(), Some("Fix login"));
+        run.rename("   ");
+        assert_eq!(run.title, None);
+    }
+
+    #[test]
+    fn run_without_title_remains_deserializable() {
+        let mut value = serde_json::to_value(run()).unwrap();
+        value.as_object_mut().unwrap().remove("title");
+        let run: Run = serde_json::from_value(value).unwrap();
+        assert_eq!(run.title, None);
     }
 }

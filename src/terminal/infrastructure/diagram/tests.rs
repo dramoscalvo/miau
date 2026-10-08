@@ -148,6 +148,7 @@ fn diagram_disk_reload_and_source_selection_preserve_persisted_run() {
     .unwrap();
     let run = Run {
         id: "001".into(),
+        title: None,
         project: root.clone(),
         spec: None,
         cursor: 0,

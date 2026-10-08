@@ -204,6 +204,7 @@ mod tests {
     fn run(id: &str) -> Run {
         Run {
             id: id.into(),
+            title: None,
             project: ".".into(),
             spec: None,
             nodes: vec![],

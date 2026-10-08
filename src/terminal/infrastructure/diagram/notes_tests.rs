@@ -30,6 +30,7 @@ impl Fixture {
         .unwrap();
         let run = Run {
             id: "001".into(),
+            title: None,
             project: root.clone(),
             spec: None,
             cursor: 0,

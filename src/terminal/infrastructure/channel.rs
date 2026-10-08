@@ -90,6 +90,7 @@ mod tests {
     fn run_with_activity() -> Run {
         Run {
             id: "001".into(),
+            title: None,
             project: ".".into(),
             spec: None,
             nodes: vec![],

@@ -20,6 +20,7 @@ fn inner_layers_do_not_depend_on_infrastructure() {
         source.join("workflow/domain.rs"),
         source.join("terminal/application.rs"),
         source.join("terminal/application/diagram.rs"),
+        source.join("terminal/application/reference_finder.rs"),
     ];
 
     let violations: Vec<PathBuf> = inner_layers

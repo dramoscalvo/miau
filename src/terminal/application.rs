@@ -1,6 +1,17 @@
 //! Terminal interaction model shared by input and rendering adapters.
 
 pub mod diagram;
+pub mod reference_finder;
+
+/// Runs skipped by one Page Up/Page Down in the run list.
+const RUN_PAGE: usize = 10;
+
+/// Index of the run whose numeric ID equals `query`, so `7` finds run `007`.
+pub fn matching_run<'a>(ids: impl IntoIterator<Item = &'a str>, query: &str) -> Option<usize> {
+    let wanted = query.parse::<u64>().ok()?;
+    ids.into_iter()
+        .position(|id| id.parse::<u64>().ok() == Some(wanted))
+}
 
 use crate::workflow::application::decisions::{self, Drafts, Question};
 use unicode_width::UnicodeWidthChar;
@@ -152,12 +163,18 @@ pub struct Model {
     pub help_scroll: u16,
     pub focus: Focus,
     pub selected: usize,
+    /// Digits typed on the run list to select a run by ID.
+    pub run_id_query: String,
+    /// Title being typed for the selected run; `None` while not renaming.
+    pub run_title_draft: Option<String>,
     pub viewed_node: usize,
     pub flow_scroll: u16,
     pub channel_scroll: u16,
     pub references_open: bool,
     pub reference_node: usize,
     pub reference_scroll: u16,
+    pub reference_finder: Option<reference_finder::Finder>,
+    pub reference_target: Option<reference_finder::Target>,
     pub detail_view: DetailView,
     pub change_selected: usize,
     pub change_scroll: u16,
@@ -186,12 +203,16 @@ impl Default for Model {
             help_scroll: 0,
             focus: Focus::Flow,
             selected: 0,
+            run_id_query: String::new(),
+            run_title_draft: None,
             viewed_node: 0,
             flow_scroll: 0,
             channel_scroll: 0,
             references_open: false,
             reference_node: 0,
             reference_scroll: 0,
+            reference_finder: None,
+            reference_target: None,
             detail_view: DetailView::Review,
             change_selected: 0,
             change_scroll: 0,
@@ -215,6 +236,13 @@ pub enum Message {
     NextReference {
         last: usize,
     },
+    OpenReferenceFinder(Vec<reference_finder::Entry>),
+    CloseReferenceFinder,
+    ReferenceFinderInput(char),
+    ReferenceFinderBackspace,
+    ReferenceFinderPrevious,
+    ReferenceFinderNext,
+    ChooseReference,
     DiagramPrevious,
     DiagramNext,
     DiagramChild,
@@ -239,6 +267,26 @@ pub enum Message {
     Scroll(i16),
     SelectPrevious,
     SelectNext {
+        last: usize,
+    },
+    SelectFirst,
+    RunIdInput {
+        character: char,
+        ids: Vec<String>,
+    },
+    RunIdBackspace {
+        ids: Vec<String>,
+    },
+    ClearRunIdQuery,
+    EditRunTitle(Option<String>),
+    RunTitleInput(char),
+    RunTitleBackspace,
+    CancelRunTitle,
+    SelectLast {
+        last: usize,
+    },
+    SelectPageUp,
+    SelectPageDown {
         last: usize,
     },
     ViewPreviousNode,
@@ -346,6 +394,12 @@ pub(crate) fn prompt_cursor_position(text: &str, cursor: usize, width: usize) ->
 }
 
 impl Model {
+    fn select_run_id(&mut self, ids: &[String]) {
+        if let Some(index) = matching_run(ids.iter().map(String::as_str), &self.run_id_query) {
+            self.selected = index;
+        }
+    }
+
     pub fn begin_streaming(&mut self) {
         self.mode = Mode::Streaming;
         self.detail_view = DetailView::Review;
@@ -407,6 +461,8 @@ impl Model {
         self.references_open = false;
         self.reference_node = 0;
         self.reference_scroll = 0;
+        self.reference_finder = None;
+        self.reference_target = None;
         self.detail_view = DetailView::Review;
         self.change_selected = 0;
         self.change_scroll = 0;
@@ -478,10 +534,53 @@ impl Model {
             Message::PreviousReference => {
                 self.reference_node = self.reference_node.saturating_sub(1);
                 self.reference_scroll = 0;
+                self.reference_target = None;
             }
             Message::NextReference { last } => {
                 self.reference_node = (self.reference_node + 1).min(last);
                 self.reference_scroll = 0;
+                self.reference_target = None;
+            }
+            Message::OpenReferenceFinder(entries) => {
+                self.reference_finder = Some(reference_finder::Finder::new(entries));
+            }
+            Message::CloseReferenceFinder => self.reference_finder = None,
+            Message::ReferenceFinderInput(character) => {
+                if let Some(finder) = self.reference_finder.as_mut() {
+                    finder.input(character);
+                }
+            }
+            Message::ReferenceFinderBackspace => {
+                if let Some(finder) = self.reference_finder.as_mut() {
+                    finder.backspace();
+                }
+            }
+            Message::ReferenceFinderPrevious => {
+                if let Some(finder) = self.reference_finder.as_mut() {
+                    finder.select_previous();
+                }
+            }
+            Message::ReferenceFinderNext => {
+                if let Some(finder) = self.reference_finder.as_mut() {
+                    finder.select_next();
+                }
+            }
+            Message::ChooseReference => {
+                let Some(finder) = self.reference_finder.take() else {
+                    return;
+                };
+                let Some(entry) = finder.chosen() else {
+                    self.reference_finder = Some(finder);
+                    return;
+                };
+                self.references_open = true;
+                self.focus = Focus::Channel;
+                self.reference_node = entry.node;
+                self.reference_scroll = 0;
+                self.reference_target = entry.line.map(|line| reference_finder::Target {
+                    line,
+                    pending_scroll: true,
+                });
             }
             Message::DiagramPrevious => {
                 self.diagram.move_selection(false);
@@ -567,6 +666,33 @@ impl Model {
             },
             Message::SelectPrevious => self.selected = self.selected.saturating_sub(1),
             Message::SelectNext { last } => self.selected = (self.selected + 1).min(last),
+            Message::SelectFirst => self.selected = 0,
+            Message::RunIdInput { character, ids } => {
+                self.run_id_query.push(character);
+                self.select_run_id(&ids);
+            }
+            Message::RunIdBackspace { ids } => {
+                self.run_id_query.pop();
+                self.select_run_id(&ids);
+            }
+            Message::ClearRunIdQuery => self.run_id_query.clear(),
+            Message::EditRunTitle(title) => self.run_title_draft = Some(title.unwrap_or_default()),
+            Message::RunTitleInput(character) => {
+                if let Some(draft) = self.run_title_draft.as_mut() {
+                    draft.push(character);
+                }
+            }
+            Message::RunTitleBackspace => {
+                if let Some(draft) = self.run_title_draft.as_mut() {
+                    draft.pop();
+                }
+            }
+            Message::CancelRunTitle => self.run_title_draft = None,
+            Message::SelectLast { last } => self.selected = last,
+            Message::SelectPageUp => self.selected = self.selected.saturating_sub(RUN_PAGE),
+            Message::SelectPageDown { last } => {
+                self.selected = self.selected.saturating_add(RUN_PAGE).min(last);
+            }
             Message::ViewPreviousNode => {
                 self.viewed_node = self.viewed_node.saturating_sub(1);
                 self.flow_scroll = 0;
@@ -1043,6 +1169,129 @@ mod tests {
     }
 
     #[test]
+    fn choosing_a_found_reference_opens_its_step_at_the_matching_line() {
+        let mut model = Model::default();
+        model.update(Message::OpenReferenceFinder(reference_finder::entries([
+            ("plan", "plan.md", "D1: Which database?"),
+            ("review", "review.md", "Intro\nBR-3: Retain audit records."),
+        ])));
+        for character in "br3".chars() {
+            model.update(Message::ReferenceFinderInput(character));
+        }
+        model.update(Message::ChooseReference);
+        assert_eq!(
+            (
+                model.reference_finder.is_some(),
+                model.references_open,
+                model.focus,
+                model.reference_node,
+                model.reference_target,
+            ),
+            (
+                false,
+                true,
+                Focus::Channel,
+                1,
+                Some(reference_finder::Target {
+                    line: 1,
+                    pending_scroll: true
+                }),
+            )
+        );
+        model.update(Message::PreviousReference);
+        assert_eq!(model.reference_target, None);
+    }
+
+    #[test]
+    fn choosing_without_a_match_keeps_the_finder_open() {
+        let mut model = Model::default();
+        model.update(Message::OpenReferenceFinder(reference_finder::entries([(
+            "plan", "plan.md", "D1",
+        )])));
+        model.update(Message::ReferenceFinderInput('z'));
+        model.update(Message::ChooseReference);
+        assert!(model.reference_finder.is_some());
+        assert!(!model.references_open);
+        model.update(Message::CloseReferenceFinder);
+        assert!(model.reference_finder.is_none());
+    }
+
+    #[test]
+    fn run_title_draft_starts_from_the_current_title_and_edits_by_character() {
+        let mut model = Model::default();
+        model.update(Message::EditRunTitle(Some("Fix 界".into())));
+        model.update(Message::RunTitleBackspace);
+        for character in "login".chars() {
+            model.update(Message::RunTitleInput(character));
+        }
+        assert_eq!(model.run_title_draft.as_deref(), Some("Fix login"));
+        model.update(Message::CancelRunTitle);
+        assert_eq!(model.run_title_draft, None);
+        model.update(Message::EditRunTitle(None));
+        assert_eq!(model.run_title_draft.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn typed_run_id_selects_the_matching_run_ignoring_zero_padding() {
+        let ids = ["001", "007", "042"];
+        let mut model = Model::default();
+        for character in "42".chars() {
+            model.update(Message::RunIdInput {
+                character,
+                ids: ids.map(String::from).to_vec(),
+            });
+        }
+        assert_eq!((model.run_id_query.as_str(), model.selected), ("42", 2));
+        model.update(Message::RunIdBackspace {
+            ids: ids.map(String::from).to_vec(),
+        });
+        assert_eq!((model.run_id_query.as_str(), model.selected), ("4", 2));
+        model.update(Message::ClearRunIdQuery);
+        assert_eq!(model.run_id_query, "");
+    }
+
+    #[test]
+    fn run_id_lookup_matches_numbers_and_rejects_unknown_ids() {
+        let ids = ["001", "007", "1000"];
+        assert_eq!(matching_run(ids, "1"), Some(0));
+        assert_eq!(matching_run(ids, "7"), Some(1));
+        assert_eq!(matching_run(ids, "0007"), Some(1));
+        assert_eq!(matching_run(ids, "1000"), Some(2));
+        assert_eq!(matching_run(ids, "8"), None);
+        assert_eq!(matching_run(ids, ""), None);
+    }
+
+    #[test]
+    fn unknown_run_id_keeps_the_current_selection() {
+        let mut model = Model {
+            selected: 1,
+            ..Model::default()
+        };
+        model.update(Message::RunIdInput {
+            character: '9',
+            ids: vec!["001".into(), "002".into()],
+        });
+        assert_eq!((model.run_id_query.as_str(), model.selected), ("9", 1));
+    }
+
+    #[test]
+    fn run_selection_jumps_to_either_end_and_by_page_within_bounds() {
+        let mut model = Model::default();
+        model.update(Message::SelectLast { last: 24 });
+        assert_eq!(model.selected, 24);
+        model.update(Message::SelectPageUp);
+        assert_eq!(model.selected, 14);
+        model.update(Message::SelectFirst);
+        assert_eq!(model.selected, 0);
+        model.update(Message::SelectPageUp);
+        assert_eq!(model.selected, 0);
+        model.update(Message::SelectPageDown { last: 24 });
+        model.update(Message::SelectPageDown { last: 24 });
+        model.update(Message::SelectPageDown { last: 24 });
+        assert_eq!(model.selected, 24);
+    }
+
+    #[test]
     fn toggling_activity_preserves_reference_position_and_run_list_clears_it() {
         let mut model = Model {
             references_open: true,
@@ -1099,7 +1348,8 @@ mod tests {
     }
     use super::{
         Action, DetailView, Focus, Message, Mode, Model, PromptEditMode, PromptKind,
-        PromptOperator, PromptTextObject, PromptWordStyle, SubmittedPrompt,
+        PromptOperator, PromptTextObject, PromptWordStyle, SubmittedPrompt, matching_run,
+        reference_finder,
     };
 
     #[test]

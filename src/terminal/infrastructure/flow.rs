@@ -6,7 +6,7 @@ use super::pane;
 use crate::{
     execution::application::AgentConfig,
     runs::domain::{Node, NodeStatus, Run},
-    terminal::application::{DetailView, Focus, artifact_review},
+    terminal::application::{DetailView, Focus, artifact_review, matching_run},
     workflow::domain::{WorkingTreeChange, WorkingTreeChangeKind},
 };
 use chrono::{DateTime, Utc};
@@ -17,6 +17,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph, Wrap},
 };
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub(crate) fn node_status_label(status: NodeStatus, complete: bool) -> &'static str {
     match (status, complete) {
@@ -166,11 +167,18 @@ fn relative_age(at: DateTime<Utc>, now: DateTime<Utc>) -> String {
     }
 }
 
+/// The highlighted run and any run ID typed to jump to one.
+#[derive(Clone, Copy)]
+pub struct RunSelection<'a> {
+    pub index: usize,
+    pub id_query: &'a str,
+}
+
 pub fn render_runs(
     frame: &mut Frame<'_>,
     area: Rect,
     runs: &[Run],
-    selected: usize,
+    selection: RunSelection<'_>,
     focus: Focus,
     now: DateTime<Utc>,
     agents: &HashMap<String, AgentConfig>,
@@ -189,12 +197,16 @@ pub fn render_runs(
                 || "workflow complete".into(),
                 |node| node_agent_label(node, agents),
             );
-            let heading = Line::from(vec![
+            let mut heading = vec![
                 Span::styled(format!("{} ", status.marker()), status.style()),
                 Span::styled(format!("{}  ", status.label()), status.style()),
                 Span::from(format!("{}  ", run.id)).cyan().bold(),
-                Span::from(format!("{}  ", project_name(&run.project))).magenta(),
-            ]);
+            ];
+            if let Some(title) = &run.title {
+                heading.push(Span::from(format!("{title}  ")).bold());
+            }
+            heading.push(Span::from(format!("{}  ", project_name(&run.project))).magenta());
+            let heading = Line::from(heading);
             let detail = Line::from(vec![
                 Span::raw("  "),
                 Span::styled(current, Style::default().bold()),
@@ -206,19 +218,73 @@ pub fn render_runs(
                 ))
                 .dark_gray(),
             ]);
-            ListItem::new(vec![heading, detail]).style(if index == selected {
+            ListItem::new(vec![heading, detail]).style(if index == selection.index {
                 Style::default().on_dark_gray().bold()
             } else {
                 Style::default()
             })
         })
         .collect::<Vec<_>>();
-    let mut state = ListState::default().with_selected(Some(selected));
+    let title = runs_title(runs, selection.id_query);
+    let mut state = ListState::default().with_selected(Some(selection.index));
     frame.render_stateful_widget(
-        List::new(items).block(pane::block(" Runs ", focus == Focus::Flow)),
+        List::new(items).block(pane::block(&title, focus == Focus::Flow)),
         area,
         &mut state,
     );
+}
+
+/// One-line editor for the selected run's title, drawn over the bottom bar.
+pub fn render_run_title_editor(frame: &mut Frame<'_>, area: Rect, draft: &str) {
+    const LABEL: &str = "Title: ";
+    const HINT: &str = "  Enter save · Esc cancel";
+    let room = usize::from(area.width)
+        .saturating_sub(LABEL.width() + HINT.width() + 1)
+        .max(1);
+    let visible = tail_by_width(draft, room);
+    let cursor = area
+        .x
+        .saturating_add(u16::try_from(LABEL.width() + visible.width()).unwrap_or(u16::MAX));
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            LABEL.cyan().bold(),
+            Span::from(visible),
+            Span::from(" "),
+            HINT.dark_gray(),
+        ])),
+        area,
+    );
+    if cursor < area.right() {
+        frame.set_cursor_position((cursor, area.y));
+    }
+}
+
+/// The longest suffix of `text` that fits in `width` terminal cells.
+fn tail_by_width(text: &str, width: usize) -> String {
+    let mut used = 0;
+    let mut tail: Vec<char> = text
+        .chars()
+        .rev()
+        .take_while(|character| {
+            used += character.width().unwrap_or(0);
+            used <= width
+        })
+        .collect();
+    tail.reverse();
+    tail.into_iter().collect()
+}
+
+/// The run list title, which echoes a typed run ID and whether it matches a run.
+fn runs_title(runs: &[Run], run_id_query: &str) -> String {
+    if run_id_query.is_empty() {
+        return " Runs ".into();
+    }
+    let ids = runs.iter().map(|run| run.id.as_str());
+    if matching_run(ids, run_id_query).is_some() {
+        format!(" Runs · open #{run_id_query} (Enter) ")
+    } else {
+        format!(" Runs · no run #{run_id_query} ")
+    }
 }
 
 fn render_empty_runs(frame: &mut Frame<'_>, area: Rect, focus: Focus) {
@@ -290,11 +356,14 @@ pub fn render_run_summary(
     let mut lines = vec![
         Line::from(Span::styled(status.label(), status.style())),
         Line::default(),
-        field_line(
-            "Run ",
-            format!("{} · {}", run.id, project_name(&run.project)),
-        ),
     ];
+    if let Some(title) = &run.title {
+        lines.push(field_line("Title: ", title.clone()));
+    }
+    lines.extend([field_line(
+        "Run ",
+        format!("{} · {}", run.id, project_name(&run.project)),
+    )]);
     if let Some(node) = run.current() {
         lines.push(field_line("Current: ", node_agent_label(node, agents)));
     }
@@ -699,8 +768,9 @@ fn streaming_scroll(text: &str, area: Rect) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::{
-        FlowView, WorkingTreeView, detail_title, node_status_label, render, render_run_summary,
-        render_runs, render_working_tree, streaming_scroll,
+        FlowView, RunSelection, WorkingTreeView, detail_title, node_status_label, render,
+        render_run_summary, render_run_title_editor, render_runs, render_working_tree,
+        streaming_scroll,
     };
     use crate::{
         execution::application::AgentConfig,
@@ -745,6 +815,7 @@ mod tests {
     fn run_with_status(status: NodeStatus) -> Run {
         Run {
             id: "014".into(),
+            title: None,
             project: "/work/miau".into(),
             spec: None,
             nodes: vec![
@@ -830,7 +901,18 @@ mod tests {
 
         terminal
             .draw(|frame| {
-                render_runs(frame, frame.area(), &runs, 0, Focus::Flow, now, &agents);
+                render_runs(
+                    frame,
+                    frame.area(),
+                    &runs,
+                    RunSelection {
+                        index: 0,
+                        id_query: "",
+                    },
+                    Focus::Flow,
+                    now,
+                    &agents,
+                );
             })
             .unwrap();
 
@@ -849,6 +931,86 @@ mod tests {
             .all(|expected| text.contains(expected)),
             "rendered run row was: {text}"
         );
+    }
+
+    #[test]
+    fn run_list_title_echoes_a_typed_run_id_and_whether_it_matches() {
+        let runs = [run_with_status(NodeStatus::Failed)];
+        let agents = agent_configs();
+        let mut titles = Vec::new();
+        for query in ["14", "9"] {
+            let mut terminal = Terminal::new(TestBackend::new(53, 5)).unwrap();
+            terminal
+                .draw(|frame| {
+                    let area = frame.area();
+                    render_runs(
+                        frame,
+                        area,
+                        &runs,
+                        RunSelection {
+                            index: 0,
+                            id_query: query,
+                        },
+                        Focus::Flow,
+                        Utc::now(),
+                        &agents,
+                    );
+                })
+                .unwrap();
+            titles.push(buffer_text(&terminal));
+        }
+        assert!(titles[0].contains("open #14 (Enter)"), "{}", titles[0]);
+        assert!(titles[1].contains("no run #9"), "{}", titles[1]);
+    }
+
+    #[test]
+    fn titled_run_shows_its_title_in_the_list_and_the_summary() {
+        let mut run = run_with_status(NodeStatus::Failed);
+        run.title = Some("Add CSV export".into());
+        let agents = agent_configs();
+        let mut terminal = Terminal::new(TestBackend::new(60, 5)).unwrap();
+        terminal
+            .draw(|frame| {
+                let selection = RunSelection {
+                    index: 0,
+                    id_query: "",
+                };
+                let area = frame.area();
+                render_runs(
+                    frame,
+                    area,
+                    &[run.clone()],
+                    selection,
+                    Focus::Flow,
+                    Utc::now(),
+                    &agents,
+                );
+            })
+            .unwrap();
+        let list = buffer_text(&terminal);
+        assert!(list.contains("014  Add CSV export"), "{list}");
+
+        let mut terminal = Terminal::new(TestBackend::new(46, 18)).unwrap();
+        terminal
+            .draw(|frame| render_run_summary(frame, frame.area(), Some(&run), &agents))
+            .unwrap();
+        let summary = buffer_text(&terminal);
+        assert!(summary.contains("Title: Add CSV export"), "{summary}");
+    }
+
+    #[test]
+    fn run_title_editor_keeps_the_end_of_a_long_draft_visible() {
+        let mut terminal = Terminal::new(TestBackend::new(50, 1)).unwrap();
+        let draft = format!("{} tail end", "界".repeat(30));
+        terminal
+            .draw(|frame| render_run_title_editor(frame, frame.area(), &draft))
+            .unwrap();
+        let text = buffer_text(&terminal);
+        assert!(
+            text.contains("Title: ") && text.contains("tail end"),
+            "{text}"
+        );
+        assert!(text.contains("Enter save · Esc cancel"), "{text}");
     }
 
     #[test]
@@ -890,7 +1052,10 @@ mod tests {
                     frame,
                     frame.area(),
                     &[],
-                    0,
+                    RunSelection {
+                        index: 0,
+                        id_query: "",
+                    },
                     Focus::Flow,
                     Utc::now(),
                     &agents,
@@ -928,7 +1093,10 @@ mod tests {
                     frame,
                     frame.area(),
                     &[],
-                    0,
+                    RunSelection {
+                        index: 0,
+                        id_query: "",
+                    },
                     Focus::Flow,
                     Utc::now(),
                     &agents,
@@ -1026,6 +1194,7 @@ mod tests {
     fn selected_agent_is_scrolled_into_the_flow_list_viewport() {
         let run = Run {
             id: "001".into(),
+            title: None,
             project: ".".into(),
             spec: None,
             nodes: (0..10)
