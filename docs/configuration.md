@@ -50,14 +50,15 @@ its role prompt from `roles/`, and writes an artifact into the run directory:
 ```toml
 [[nodes]]
 name = "plan"
-agent = "codex"
+agent = "claude"
+session_group = "delivery"
 role = "planner"
 writes = "plan.md"
 
 [[nodes]]
 name = "critique"
-agent = "claude"
-session_group = "delivery"
+agent = "codex"
+session_group = "assurance"
 role = "critic"
 writes = "critique.md"
 
@@ -91,9 +92,9 @@ consume tokens; savings depend on which material the agent needs. No additional 
 
 `session_group` is optional. A node with a group resumes the latest captured session from an earlier node that has both
 the same group and the same configured agent. Nodes without it start a fresh session, and re-running a node still
-resumes that node's own session. The default workflow shares Codex's `delivery` session between critique and
-implementation, where retained analysis is useful, but keeps planning and review independent to avoid a self-review
-bias.
+resumes that node's own session. The default workflow gives each agent one session: Claude's `delivery` session
+carries planning into implementation, and Codex's `assurance` session carries critique into review. The authoring and
+checking agents stay separate, so review is never done by the agent that wrote the code.
 
 Session reuse avoids some repeated repository discovery and can improve prompt cache hits, but it does not make the
 earlier transcript free: that history still occupies context and may be reprocessed after cache expiry or CLI changes.

@@ -177,21 +177,28 @@ mod tests {
     }
 
     #[test]
-    fn embedded_workflow_reuses_the_codex_delivery_session() {
+    fn embedded_workflow_shares_one_session_per_agent() {
         let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
         let groups: Vec<_> = workflow
             .nodes
             .iter()
-            .filter_map(|node| {
-                node.session_group
-                    .as_deref()
-                    .map(|group| (node.name.as_str(), group))
+            .map(|node| {
+                (
+                    node.name.as_str(),
+                    node.agent.as_deref(),
+                    node.session_group.as_deref(),
+                )
             })
             .collect();
 
         assert_eq!(
             groups,
-            [("critique", "delivery"), ("implement", "delivery")]
+            [
+                ("plan", Some("claude"), Some("delivery")),
+                ("critique", Some("codex"), Some("assurance")),
+                ("implement", Some("claude"), Some("delivery")),
+                ("review", Some("codex"), Some("assurance")),
+            ]
         );
     }
 

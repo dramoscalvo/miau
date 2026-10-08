@@ -1,13 +1,14 @@
 [[nodes]]
 name = "plan"
-agent = "codex"
+agent = "claude"
+session_group = "delivery"
 role = "planner"
 writes = "plan.md"
 
 [[nodes]]
 name = "critique"
-agent = "claude"
-session_group = "delivery"
+agent = "codex"
+session_group = "assurance"
 role = "critic"
 writes = "critique.md"
 
@@ -21,5 +22,6 @@ writes = "implementation.md"
 [[nodes]]
 name = "review"
 agent = "codex"
+session_group = "assurance"
 role = "reviewer"
 writes = "review.md"
