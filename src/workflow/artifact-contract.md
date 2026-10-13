@@ -1,3 +1,5 @@
+Always develop on the current branch. Do not create or switch branches unless the human explicitly requests it.
+
 Return one Markdown artifact, starting with exactly `# Review`, followed later
 by exactly `# Handoff` on its own line. Use these sections even with a custom role.
 Do not prepend YAML frontmatter; run metadata is already persisted by miau.

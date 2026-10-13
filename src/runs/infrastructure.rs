@@ -97,7 +97,8 @@ impl RunRepository for FileRepository {
                 }
             }
         }
-        runs.sort_by(|a, b| a.id.cmp(&b.id));
+        // Newest first: ids are zero-padded sequence numbers.
+        runs.sort_by(|a, b| b.id.cmp(&a.id));
         Ok(runs)
     }
 }
@@ -221,6 +222,17 @@ mod tests {
         repo.save(&expected).unwrap();
         assert_eq!(repo.load("014").unwrap(), expected);
         assert!(!dir.join("014/state.json.tmp").exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn list_puts_the_newest_runs_first() {
+        let dir = std::env::temp_dir().join(format!("miau-list-order-{}", std::process::id()));
+        let repo = FileRepository::new(&dir);
+        for id in ["002", "010", "001"] {
+            repo.save(&run(id)).unwrap();
+        }
+        let ids: Vec<_> = repo.list().unwrap().into_iter().map(|run| run.id).collect();
+        assert_eq!(ids, ["010", "002", "001"]);
         let _ = fs::remove_dir_all(dir);
     }
     #[test]

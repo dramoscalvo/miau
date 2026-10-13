@@ -496,6 +496,9 @@ mod tests {
                     node.session_id = (attempts > 1).then(|| "existing-session".into());
                     let prompt = orchestrator.assemble_prompt(&run, None).unwrap();
                     assert!(prompt.contains(instructions));
+                    assert!(prompt.contains(
+                        "Always develop on the current branch. Do not create or switch branches unless the human explicitly requests it."
+                    ));
                     assert!(prompt.ends_with(include_str!("artifact-contract.md")));
                     for section in [
                         "## Objective",

@@ -73,6 +73,9 @@ writes = "implementation.md"
 Role files are plain Markdown instructions named after the workflow role, such as `roles/planner.md` for `role =
 "planner"`.
 
+Every task-agent prompt instructs the agent to develop on the current branch and to create or switch branches only
+when explicitly requested by the human. This applies to custom roles and resumed sessions as well.
+
 Each agent returns one Markdown artifact with `# Review` and `# Handoff` sections. Plans use a feature document in
 Review: Objective, Scope (in/out), Behavior, Tests (Unit/Integration/E2E Given/When/Then scenarios with stable IDs),
 Assumptions, and References. Implementation reports describe the delivered feature using the same sections and add

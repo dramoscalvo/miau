@@ -404,8 +404,8 @@ impl App {
             created_at: Utc::now(),
         };
         self.repository.save(&run)?;
-        self.runs.push(run);
-        self.ui.selected = self.runs.len().saturating_sub(1);
+        self.runs.insert(0, run);
+        self.ui.selected = 0;
         self.open_selected()
     }
 
