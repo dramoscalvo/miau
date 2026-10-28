@@ -241,7 +241,7 @@ fn all_hints(view: &HelpView<'_>) -> String {
             DetailView::Changes => "v next view · j/k files · PgUp/PgDn diff",
         };
         hints = format!(
-            "{hints} · {view_hints} · c activity/references · / find reference · Tab then ←/→ reference step · R reload focused reference"
+            "{hints} · {view_hints} · E request next evaluation fixes · c activity/references · / find reference · Tab then ←/→ reference step · R reload focused reference"
         );
     }
     hints

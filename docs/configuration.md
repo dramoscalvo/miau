@@ -15,7 +15,7 @@ includes Claude Code and Codex examples:
 [claude]
 bin = "claude"
 effort = "high"
-args = ["--model", "claude-opus-5-5", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(ls:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(echo:*) Bash(pnpm test:*) Bash(pnpm lint:*) Bash(pnpm tsc:*) Bash(pnpm prettier:*) Bash(pnpm style:fix:*) Bash(pnpm build:*) Bash(node --run:*) Bash(npx jest:*) Bash(npx tsc:*) Bash(npx eslint:*) Bash(.venv/bin/pytest:*) Bash(.venv/bin/python -m pytest:*) Bash(.venv/bin/dagster definitions validate:*) Bash(pytest:*) Bash(python3 -m py_compile:*) Bash(docker compose -f /home/david/Work/odoo/docker-compose.yml run --rm odoo odoo -d test:*) Bash(rsync -a --delete --exclude=__pycache__ /home/david/Work/sn-odoo/:*)", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
+args = ["--model", "claude-opus-5-5", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(ls:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(echo:*) Bash(pnpm test:*) Bash(pnpm lint:*) Bash(pnpm tsc:*) Bash(pnpm prettier:*) Bash(pnpm style:fix:*) Bash(pnpm build:*) Bash(pnpm quality:local:*) Bash(pnpm coverage:unit:*) Bash(pnpm coverage:gate:*) Bash(pnpm crap:*) Bash(pnpm crap:coverage:*) Bash(pnpm crap:report:*) Bash(pnpm crap:check:*) Bash(pnpm dry:*) Bash(pnpm mutation:*) Bash(pnpm mutation:changed:*) Bash(node --run:*) Bash(npx jest:*) Bash(npx tsc:*) Bash(npx eslint:*) Bash(npx stylelint:*) Bash(pnpm stylelint:*) Bash(.venv/bin/pytest:*) Bash(.venv/bin/python -m pytest:*) Bash(.venv/bin/dagster definitions validate:*) Bash(pytest:*) Bash(python3 -m py_compile:*) Bash(docker compose -f /home/david/Work/odoo/docker-compose.yml run --rm odoo odoo -d test:*) Bash(rsync -a --delete --exclude=__pycache__ /home/david/Work/sn-odoo/:*)", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
 resume_args = ["--resume", "{session}"]
 discuss_args = ["--resume", "{session}"]
 parser = "claude"
@@ -41,6 +41,16 @@ The main run list and selected-run summary also show the model supplied through 
 This is the requested model from the loaded configuration, including aliases such as `opus`; it is not a model
 version confirmed by the provider or a historical record of earlier attempts. Restart miau after changing the file.
 When no explicit model is configured, the label shows only the agent and any configured effort.
+
+The bundled Claude allowlist permits project quality analysis in every task: `pnpm quality:local`,
+`pnpm coverage:unit`, `pnpm coverage:gate`, `pnpm crap`, `pnpm crap:coverage`, `pnpm crap:report`,
+`pnpm crap:check`, `pnpm dry`, `pnpm mutation`, and `pnpm mutation:changed`. These permissions also apply
+when resuming a task. The target project must provide the scripts and their dependencies; miau does not install
+or automatically run them. Follow that project's quality-analysis instructions when interpreting reports.
+Baseline-refresh commands are not added to this allowlist. Codex continues to use its own configured permission policy.
+
+Existing installations retain their configuration. Add the corresponding `Bash(pnpm <script>:*)` entries to Claude's
+`--allowedTools` argument in your installed `agents.toml`, then restart miau to load the updated permissions.
 
 ## Configure the workflow
 

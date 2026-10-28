@@ -200,6 +200,28 @@ fn prompt_kind(run: Option<&Run>, viewed_node: usize) -> Option<PromptKind> {
     }
 }
 
+fn open_next_evaluation_prompt(ui: &mut Model, run: Option<&Run>) -> bool {
+    let Some(run) = run else { return false };
+    if !matches!(ui.mode, Mode::Gate)
+        || run
+            .nodes
+            .iter()
+            .any(|node| node.status == NodeStatus::Running)
+        || prompt_kind(Some(run), ui.viewed_node) != Some(PromptKind::Revision)
+        || !run
+            .nodes
+            .get(ui.viewed_node.saturating_add(1))
+            .is_some_and(|node| node.status == NodeStatus::Done)
+    {
+        return false;
+    }
+    ui.open_prompt(PromptKind::Revision);
+    ui.update(Message::EnterPromptInsertMode);
+    ui.update(Message::Paste("Review the next step's evaluation, provided as Revision feedback in the upstream artifacts. Read the current files from disk and update this step's result to address the findings. Explain any findings you disagree with and preserve open human decisions. Return the complete updated artifact for human review.".into()));
+    ui.update(Message::LeavePromptInsertMode);
+    true
+}
+
 fn handle_insert_prompt_key(ui: &mut Model, key: KeyEvent, prompt_width: usize) {
     match key.code {
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1195,6 +1217,11 @@ impl App {
                     self.start_current().await?;
                 }
             }
+            KeyCode::Char('E') if self.running.is_none() => {
+                if !open_next_evaluation_prompt(&mut self.ui, self.run.as_ref()) {
+                    self.ui.error = Some("Select a completed or failed agent step with a completed following evaluation.".into());
+                }
+            }
             KeyCode::Char('p' | 'r') if self.prompt_ready() => {
                 if let Some(kind) = self.selected_prompt_kind() {
                     self.ui.open_prompt(kind);
@@ -2037,6 +2064,46 @@ mod tests {
         ]);
 
         assert_eq!(prompt_kind(Some(&run), 1), None);
+    }
+
+    #[test]
+    fn next_evaluation_opens_an_editable_revision_without_advancing() {
+        let run = run_with_nodes(vec![
+            node("plan", NodeStatus::Done),
+            node("critique", NodeStatus::Done),
+        ]);
+        let mut model = Model::default();
+        model.mode = Mode::Gate;
+
+        assert!(super::open_next_evaluation_prompt(&mut model, Some(&run)));
+        assert_eq!(model.mode, Mode::Prompt(PromptKind::Revision));
+        assert!(model.prompt.contains("next step's evaluation"));
+        assert_eq!(run.nodes[0].status, NodeStatus::Done);
+        assert!(
+            matches!(model.submit_prompt(), Some(crate::terminal::application::SubmittedPrompt::Revision(note)) if note.contains("complete updated artifact"))
+        );
+    }
+
+    #[test]
+    fn next_evaluation_requires_a_finished_following_step_and_an_idle_agent() {
+        for statuses in [
+            vec![NodeStatus::Done],
+            vec![NodeStatus::Done, NodeStatus::Pending],
+            vec![NodeStatus::Done, NodeStatus::Failed],
+            vec![NodeStatus::Pending, NodeStatus::Done],
+            vec![NodeStatus::Done, NodeStatus::Done, NodeStatus::Running],
+        ] {
+            let run = run_with_nodes(
+                statuses
+                    .into_iter()
+                    .map(|status| node("step", status))
+                    .collect(),
+            );
+            let mut model = Model::default();
+            model.mode = Mode::Gate;
+            assert!(!super::open_next_evaluation_prompt(&mut model, Some(&run)));
+            assert_eq!(model.mode, Mode::Gate);
+        }
     }
 
     fn run_with_nodes(nodes: Vec<Node>) -> Run {

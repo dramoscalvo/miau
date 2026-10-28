@@ -177,6 +177,30 @@ mod tests {
     }
 
     #[test]
+    fn embedded_claude_allows_project_quality_analysis() {
+        let agents: HashMap<String, AgentConfig> = toml::from_str(DEFAULT_AGENTS).unwrap();
+        let args = &agents["claude"].args;
+        let allowlist = &args[args.iter().position(|arg| arg == "--allowedTools").unwrap() + 1];
+        for command in [
+            "quality:local",
+            "coverage:unit",
+            "coverage:gate",
+            "crap",
+            "crap:coverage",
+            "crap:report",
+            "crap:check",
+            "dry",
+            "mutation",
+            "mutation:changed",
+        ] {
+            assert!(
+                allowlist.contains(&format!("Bash(pnpm {command}:*)")),
+                "missing permission for pnpm {command}"
+            );
+        }
+    }
+
+    #[test]
     fn embedded_workflow_shares_one_session_per_agent() {
         let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
         let groups: Vec<_> = workflow

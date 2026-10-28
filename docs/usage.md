@@ -46,6 +46,13 @@ and add a case for an empty input.” You do not need to create a custom feedbac
 in its run directory as `feedback-N.md` (N is the zero-based step index), with numbered versions for later requests.
 These preserve the full text; the activity channel shows only a short summary. Unsent drafts are not persisted.
 
+Press uppercase `E` on a completed or failed agent step to request fixes based on the following step's evaluation.
+For example, select the planner after its critique finishes and press `E`. This opens Request changes with a ready-made
+request to read the evaluation and revise the selected step's result. Press Enter to send, edit the request first with
+`i`, or press Esc to cancel. The following step must be completed and no agent may be running. The agent reads the
+evaluation artifact from disk through the existing revision feedback reference. This action does not approve a step;
+the revised result returns for human review.
+
 Decision answers have a dedicated view and persisted drafts. Whenever a selected step's artifact contains open
 decisions, **Decisions** opens by default. Use Up/Down or `j`/`k` to select a question and Enter to edit its answer.
 The view shows each decision's ID and draft status, with the selected question's context, recommendation, and answer
