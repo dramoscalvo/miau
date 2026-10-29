@@ -1,5 +1,11 @@
 Always develop on the current branch. Do not create or switch branches unless the human explicitly requests it.
 
+Run commands in the foreground and wait for them to finish, including long test, coverage, mutation, and quality
+commands. Set a long enough timeout instead of starting background tasks, background shells, or monitors. This run is
+non-interactive: it ends when you return the artifact, so completion notifications never arrive and unfinished work is
+lost. Never return an artifact that says a command is still running or that you will wait for its result. If a command
+cannot finish within the available timeout, stop it, report it as not run with the reason, and return the artifact.
+
 Return one Markdown artifact, starting with exactly `# Review`, followed later
 by exactly `# Handoff` on its own line. Use these sections even with a custom role.
 Do not prepend YAML frontmatter; run metadata is already persisted by miau.

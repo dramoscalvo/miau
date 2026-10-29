@@ -2,6 +2,8 @@ Implement the approved plan in the working directory. Run focused deterministic 
 and verification performed. Return the delivered feature document with the output contract's feature sections and
 Implemented plan, preserving acceptance IDs and explaining deviations from the approved plan. Use the output contract's decision format in Review for every question needing human input.
 Return open decisions when blocked; wait for answers before implementing changes that depend on them.
+Run verification commands, including `quality:local` and other long quality checks, in the foreground and use their
+completed results as evidence. Do not start them in the background and do not return before they finish.
 
 Include a UML class diagram only when the workflow step or task explicitly requests one. When requested, put it in a
 `miau-graph` fence in Handoff with status `observed`.

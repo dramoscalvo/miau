@@ -500,6 +500,11 @@ mod tests {
                         "Always develop on the current branch. Do not create or switch branches unless the human explicitly requests it."
                     ));
                     assert!(prompt.ends_with(include_str!("artifact-contract.md")));
+                    assert!(
+                        prompt
+                            .contains("Run commands in the foreground and wait for them to finish"),
+                        "{role}/{agent}: missing foreground command rule"
+                    );
                     for section in [
                         "## Objective",
                         "## Scope",
