@@ -1,7 +1,10 @@
 //! Safe terminal suspension and restoration around interactive children.
+//!
+//! The TUI never enables mouse capture, so the terminal keeps its native text
+//! selection and copy behaviour.
 
 use crossterm::{
-    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
+    event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -26,7 +29,6 @@ pub fn run(
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture,
         DisableBracketedPaste
     )?;
     terminal.show_cursor()?;
@@ -47,7 +49,6 @@ pub fn restore(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<
     execute!(
         terminal.backend_mut(),
         EnterAlternateScreen,
-        EnableMouseCapture,
         EnableBracketedPaste
     )?;
     terminal.clear()
@@ -56,10 +57,5 @@ pub fn restore(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<
 pub fn restore_stdio() {
     let _ = disable_raw_mode();
     let mut stdout = io::stdout();
-    let _ = execute!(
-        stdout,
-        LeaveAlternateScreen,
-        DisableMouseCapture,
-        DisableBracketedPaste
-    );
+    let _ = execute!(stdout, LeaveAlternateScreen, DisableBracketedPaste);
 }

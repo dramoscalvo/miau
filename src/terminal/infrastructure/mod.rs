@@ -39,8 +39,8 @@ use anyhow::{Result, anyhow};
 use chrono::Utc;
 use crossterm::{
     event::{
-        EnableBracketedPaste, EnableMouseCapture, Event as TerminalEvent, EventStream, KeyCode,
-        KeyEvent, KeyEventKind, KeyModifiers,
+        EnableBracketedPaste, Event as TerminalEvent, EventStream, KeyCode, KeyEvent, KeyEventKind,
+        KeyModifiers,
     },
     execute,
     terminal::{EnterAlternateScreen, enable_raw_mode},
@@ -1425,12 +1425,7 @@ pub async fn run(config: UiConfig) -> Result<()> {
     let mut app = App::load(config)?;
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(
-        stdout,
-        EnterAlternateScreen,
-        EnableMouseCapture,
-        EnableBracketedPaste
-    )?;
+    execute!(stdout, EnterAlternateScreen, EnableBracketedPaste)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;

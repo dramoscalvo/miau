@@ -18,7 +18,8 @@ created before titles existed stay untitled until you name them with `t`.
 
 The bottom bar shows the main actions for the current screen. Press `?` to open the full shortcut popup, or `F1`
 while typing in a prompt. Scroll help with Up/Down or Page Up/Page Down; `Esc`, `?`, or `F1` closes it. Help leaves
-your current screen and draft intact, and workflow action keys are inactive until you close it.
+your current screen and draft intact, and workflow action keys are inactive until you close it. miau does not
+capture the mouse, so you can select text with the mouse and copy it with the terminal's own copy shortcut.
 
 Before starting a pending node, press `p`, type an initial prompt, and press Enter to save it; then press `s` to start
 the node. After an agent finishes, `r` opens **Request changes** and Enter sends it immediately. `p` remains an alias.

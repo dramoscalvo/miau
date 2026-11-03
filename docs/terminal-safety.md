@@ -7,13 +7,17 @@ The required sequence is implemented in
 `src/terminal/infrastructure/handoff.rs`:
 
 1. Disable raw mode.
-2. Leave the alternate screen and disable mouse capture.
+2. Leave the alternate screen and disable bracketed paste.
 3. Show the cursor.
 4. Run the child with inherited stdio and wait synchronously.
 5. Re-enable raw mode.
-6. Re-enter the alternate screen and mouse capture.
+6. Re-enter the alternate screen and bracketed paste.
 7. Clear the terminal.
 8. Reload artifact and state files from disk.
+
+The TUI never enables mouse capture. Mouse capture would stop the terminal's
+native text selection, so the operator could not select and copy text from the
+screen. Do not add `EnableMouseCapture` to the setup, handoff, or restore paths.
 
 Restoration must run when child creation or waiting returns an error. The panic
 hook in `main.rs` must restore stdio before printing the panic report. Never add
