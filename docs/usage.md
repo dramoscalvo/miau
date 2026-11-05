@@ -198,6 +198,15 @@ From a project screen, press `b` to return to the initial run list. While an age
 project screen remains visible so active work cannot be hidden accidentally. Press `x` and confirm with `y` to stop the
 agent without quitting miau. The interrupted node remains at its decision gate.
 
+Press `!` on the run list, at a gate, or while an agent is running to open your `$SHELL` (or `sh`) in the run's project
+directory, or in the current directory from the run list. Use it for local setup that the agent cannot do, such as
+`sudo -v`, then type `exit` or press Ctrl+D to return. A running agent keeps working while the shell is open: miau
+still records its output, session, and completion, and the screen shows them when you return. The shell sets
+`MIAU_SHELL=1` so your prompt can show that it is nested. miau does not send anything from the shell to the agent; the
+agent only sees changes to shared state such as files or cached sudo credentials. Whether the agent can use a cached
+`sudo` ticket depends on your sudoers `timestamp_type`; the default per-terminal ticket applies because the agent runs
+on the same terminal. The shell's exit status is ignored.
+
 In UML class diagrams, `j`/`k` selects a class, `}` selects a relationship, Enter follows it, and Backspace returns.
 Press `Esc` to return to the complete document view. Use uppercase `H`/`J`/`K`/`L` to pan and Home to reset. Left/Right keeps Diagram open while browsing the planning and
 implementation steps, preserving the selected type when its stable ID exists in both artifacts. Press `p` or `r` to

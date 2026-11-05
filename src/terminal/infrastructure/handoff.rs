@@ -3,14 +3,17 @@
 //! The TUI never enables mouse capture, so the terminal keeps its native text
 //! selection and copy behaviour.
 
+use crate::execution::{domain::Event, infrastructure::RunningAgent};
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
+    style::Print,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{
     io::{self, Stdout},
+    path::Path,
     process::{Command, ExitStatus, Stdio},
 };
 use thiserror::Error;
@@ -25,13 +28,10 @@ pub fn run(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     command: &mut Command,
 ) -> Result<ExitStatus, HandoffError> {
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableBracketedPaste
-    )?;
-    terminal.show_cursor()?;
+    if let Err(error) = suspend(terminal) {
+        let _ = restore(terminal);
+        return Err(error.into());
+    }
     let child_result = command
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -41,6 +41,69 @@ pub fn run(
     match (child_result, restore_result) {
         (Ok(status), Ok(())) => Ok(status),
         (Err(error), _) | (_, Err(error)) => Err(HandoffError::Io(error)),
+    }
+}
+
+pub fn suspend(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableBracketedPaste
+    )?;
+    terminal.show_cursor()
+}
+
+/// Starts the operator's `$SHELL` (or `sh`) on the suspended terminal.
+///
+/// The caller must suspend the terminal first and keep draining agent events
+/// with [`next_shell_wait`] so a running agent never blocks on a full pipe.
+pub fn spawn_shell(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    cwd: &Path,
+    agent_running: bool,
+) -> io::Result<tokio::process::Child> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".into());
+    let agent = if agent_running {
+        " The agent keeps running."
+    } else {
+        ""
+    };
+    execute!(
+        terminal.backend_mut(),
+        Print(format!(
+            "miau: shell in {}.{agent} Type `exit` to return.\r\n",
+            cwd.display()
+        ))
+    )?;
+    tokio::process::Command::new(shell)
+        .current_dir(cwd)
+        .env("MIAU_SHELL", "1")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+}
+
+#[derive(Debug)]
+pub enum ShellWait {
+    Exited(io::Result<ExitStatus>),
+    Agent(Option<Event>),
+}
+
+/// Waits for the shell to exit or for the next agent event, whichever comes first.
+pub async fn next_shell_wait(
+    shell: &mut tokio::process::Child,
+    running: &mut Option<RunningAgent>,
+) -> ShellWait {
+    tokio::select! {
+        status = shell.wait() => ShellWait::Exited(status),
+        event = async {
+            match running {
+                Some(agent) => agent.events.recv().await,
+                None => std::future::pending().await,
+            }
+        } => ShellWait::Agent(event),
     }
 }
 
@@ -58,4 +121,63 @@ pub fn restore_stdio() {
     let _ = disable_raw_mode();
     let mut stdout = io::stdout();
     let _ = execute!(stdout, LeaveAlternateScreen, DisableBracketedPaste);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ShellWait, next_shell_wait};
+    use crate::execution::{
+        application::Request,
+        domain::EventKind,
+        infrastructure::{ShellAdapter, spawn},
+    };
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn shell_wait_delivers_agent_events_before_the_shell_exits() {
+        let log = std::env::temp_dir().join(format!("miau-shell-{}.jsonl", std::process::id()));
+        let request = Request {
+            prompt: String::new(),
+            cwd: ".".into(),
+            resume: None,
+            schema: None,
+        };
+        let mut running = Some(
+            spawn(
+                ShellAdapter::new("agent", vec!["sh".into(), "-c".into(), "echo hi".into()]),
+                request,
+                &log,
+            )
+            .await
+            .unwrap(),
+        );
+        let mut shell = tokio::process::Command::new("sh")
+            .args(["-c", "sleep 0.5"])
+            .spawn()
+            .unwrap();
+
+        let mut order = Vec::new();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match next_shell_wait(&mut shell, &mut running).await {
+                    ShellWait::Agent(Some(event)) => {
+                        if let EventKind::Text(text) = event.kind {
+                            order.push(text);
+                        }
+                    }
+                    ShellWait::Agent(None) => running = None,
+                    ShellWait::Exited(status) => {
+                        assert!(status.unwrap().success());
+                        order.push("exited".into());
+                        break;
+                    }
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(order, ["hi", "exited"]);
+        let _ = std::fs::remove_file(log);
+    }
 }

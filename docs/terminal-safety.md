@@ -19,10 +19,17 @@ The TUI never enables mouse capture. Mouse capture would stop the terminal's
 native text selection, so the operator could not select and copy text from the
 screen. Do not add `EnableMouseCapture` to the setup, handoff, or restore paths.
 
+The `!` shell handoff uses the same suspend and restore steps, but waits for the shell asynchronously. While the shell
+runs, the loop keeps receiving agent events and applies them to state without drawing, so a running agent never blocks
+on a full output pipe. It never polls terminal input during the handoff, so the shell receives every keystroke.
+Interactive shells move themselves into their own process group, so Ctrl+C at the shell prompt does not reach miau
+or the agent.
+
 Restoration must run when child creation or waiting returns an error. The panic
 hook in `main.rs` must restore stdio before printing the panic report. Never add
-a blocking child wait to the asynchronous TUI loop; handoff is the explicit
-exception because drawing is suspended.
+a blocking child wait to the asynchronous TUI loop; editor and discussion
+handoff is the explicit exception because drawing is suspended and no agent
+runs.
 
 For a streaming child, `q` first enters confirmation. Only confirmation with
 `y` sends cancellation, persists a failure event, and exits. A killed process

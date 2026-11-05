@@ -79,7 +79,7 @@ fn gate_text(
     if can_finish {
         commands.push("f finish");
     }
-    commands.extend(["←/→ agents", "b runs", "tab pane", "q quit"]);
+    commands.extend(["←/→ agents", "b runs", "tab pane", "! shell", "q quit"]);
     commands.join(" · ")
 }
 
@@ -211,10 +211,12 @@ fn all_hints(view: &HelpView<'_>) -> String {
     }
     let mut hints = match view.mode {
         Mode::RunList => {
-            "↑↓/j/k select run · g/G first/last · PgUp/PgDn page · type ID then enter open · t title · n new · q quit"
+            "↑↓/j/k select run · g/G first/last · PgUp/PgDn page · type ID then enter open · t title · n new · ! shell · q quit"
                 .into()
         }
-        Mode::Streaming => "←/→ agents · tab pane · ↑↓ scroll · x stop · q quit".into(),
+        Mode::Streaming => {
+            "←/→ agents · tab pane · ↑↓ scroll · x stop · ! shell · q quit".into()
+        }
         Mode::Gate => gate_text(
             view.status,
             view.is_current,
@@ -427,6 +429,17 @@ mod tests {
     }
 
     #[test]
+    fn help_advertises_the_shell_while_an_agent_runs_and_at_gates() {
+        for mode in [&Mode::RunList, &Mode::Streaming, &Mode::Gate] {
+            let view = super::HelpView {
+                mode,
+                ..gate_view()
+            };
+            assert!(super::all_hints(&view).contains("! shell"));
+        }
+    }
+
+    #[test]
     fn stop_confirmation_explains_that_miau_stays_open() {
         assert_eq!(
             confirmation_text(&Action::Stop),
@@ -446,7 +459,7 @@ mod tests {
     fn pending_current_agent_advertises_prompt_before_start() {
         assert_eq!(
             gate_text(Some(NodeStatus::Pending), true, true, false, true),
-            "p prompt · s start · f finish · ←/→ agents · b runs · tab pane · q quit"
+            "p prompt · s start · f finish · ←/→ agents · b runs · tab pane · ! shell · q quit"
         );
     }
 
@@ -454,7 +467,7 @@ mod tests {
     fn completed_gate_advertises_only_decision_commands() {
         assert_eq!(
             gate_text(Some(NodeStatus::Done), true, true, true, true),
-            "a approve & continue · r request changes · d discuss with agent · e edit artifact · f finish · ←/→ agents · b runs · tab pane · q quit"
+            "a approve & continue · r request changes · d discuss with agent · e edit artifact · f finish · ←/→ agents · b runs · tab pane · ! shell · q quit"
         );
     }
 
@@ -462,7 +475,7 @@ mod tests {
     fn completed_historical_agent_advertises_follow_up_without_approval() {
         assert_eq!(
             gate_text(Some(NodeStatus::Done), false, true, true, true),
-            "r request changes · d discuss with agent · f finish · ←/→ agents · b runs · tab pane · q quit"
+            "r request changes · d discuss with agent · f finish · ←/→ agents · b runs · tab pane · ! shell · q quit"
         );
     }
 
@@ -481,7 +494,7 @@ mod tests {
     fn command_nodes_do_not_advertise_agent_prompting() {
         assert_eq!(
             gate_text(Some(NodeStatus::Done), false, false, false, false),
-            "←/→ agents · b runs · tab pane · q quit"
+            "←/→ agents · b runs · tab pane · ! shell · q quit"
         );
     }
 

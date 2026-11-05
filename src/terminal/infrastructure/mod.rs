@@ -143,6 +143,10 @@ fn opens_reference_finder(code: KeyCode, mode: &Mode) -> bool {
     code == KeyCode::Char('/') && matches!(mode, Mode::Gate | Mode::Streaming)
 }
 
+fn opens_shell(code: KeyCode, mode: &Mode) -> bool {
+    code == KeyCode::Char('!') && matches!(mode, Mode::RunList | Mode::Gate | Mode::Streaming)
+}
+
 fn returns_to_run_list(code: KeyCode, mode: &Mode) -> bool {
     code == KeyCode::Char('b') && matches!(mode, Mode::Gate)
 }
@@ -1006,6 +1010,10 @@ impl App {
             self.ui.mode = Mode::Confirm(Action::Stop);
             return Ok(false);
         }
+        if opens_shell(code, &self.ui.mode) {
+            self.shell(terminal).await?;
+            return Ok(false);
+        }
         if code == KeyCode::Char('f') && can_finish(self.run.as_ref(), &self.ui.mode) {
             self.ui.mode = Mode::Confirm(Action::Finish);
             return Ok(false);
@@ -1412,6 +1420,47 @@ impl App {
         self.ui.open_prompt(PromptKind::Discussion);
         Ok(())
     }
+
+    /// Hands the terminal to an interactive shell while agent events keep
+    /// flowing into state, so the agent never blocks on a full output pipe.
+    async fn shell(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+        let cwd = match &self.run {
+            Some(run) => run.project.clone(),
+            None => std::env::current_dir()?,
+        };
+        let mut failure = None;
+        let status = match handoff::suspend(terminal)
+            .and_then(|()| handoff::spawn_shell(terminal, &cwd, self.running.is_some()))
+        {
+            Ok(mut child) => loop {
+                match handoff::next_shell_wait(&mut child, &mut self.running).await {
+                    handoff::ShellWait::Exited(status) => break status,
+                    handoff::ShellWait::Agent(event) if failure.is_none() => {
+                        let accepted = match event {
+                            Some(event) => self.accept_event(event),
+                            None => self.stream_closed(),
+                        };
+                        failure = accepted.err();
+                    }
+                    handoff::ShellWait::Agent(_) => {}
+                }
+            },
+            Err(error) => Err(error),
+        };
+        let restored = handoff::restore(terminal);
+        if self.run.is_some() {
+            self.reload_artifact()?;
+            self.refresh_working_tree_if_visible();
+        }
+        restored?;
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        // An interactive shell exits with its last command's status, which is
+        // not a failure of the handoff itself.
+        status?;
+        Ok(())
+    }
 }
 
 async fn next_agent_event(running: &mut Option<RunningAgent>) -> Option<Event> {
@@ -1700,6 +1749,22 @@ mod tests {
             .map(|mode| super::opens_reference_finder(KeyCode::Char('/'), &mode)),
             [true, true, false, false]
         );
+    }
+
+    #[test]
+    fn bang_opens_a_shell_outside_prompts_and_confirmations() {
+        assert_eq!(
+            [
+                Mode::RunList,
+                Mode::Gate,
+                Mode::Streaming,
+                Mode::Prompt(PromptKind::Initial),
+                Mode::Confirm(Action::Stop),
+            ]
+            .map(|mode| super::opens_shell(KeyCode::Char('!'), &mode)),
+            [true, true, true, false, false]
+        );
+        assert!(!super::opens_shell(KeyCode::Char('s'), &Mode::Gate));
     }
 
     #[test]
