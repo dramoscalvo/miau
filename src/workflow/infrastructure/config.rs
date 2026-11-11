@@ -201,6 +201,26 @@ mod tests {
     }
 
     #[test]
+    fn embedded_claude_allows_scoped_test_and_lint_scripts() {
+        let agents: HashMap<String, AgentConfig> = toml::from_str(DEFAULT_AGENTS).unwrap();
+        let args = &agents["claude"].args;
+        let allowlist = &args[args.iter().position(|arg| arg == "--allowedTools").unwrap() + 1];
+        // `Bash(pnpm test:*)` matches `pnpm test <args>` only, not `pnpm test:unit`.
+        for command in [
+            "test:unit",
+            "test:integration",
+            "test:e2e",
+            "test:file",
+            "lint:server",
+        ] {
+            assert!(
+                allowlist.contains(&format!("Bash(pnpm {command}:*)")),
+                "missing permission for pnpm {command}"
+            );
+        }
+    }
+
+    #[test]
     fn embedded_workflow_shares_one_session_per_agent() {
         let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
         let groups: Vec<_> = workflow
