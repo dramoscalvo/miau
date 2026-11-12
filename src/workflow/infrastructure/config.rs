@@ -221,6 +221,17 @@ mod tests {
     }
 
     #[test]
+    fn embedded_claude_may_ask_the_operator_to_run_a_command() {
+        let agents: HashMap<String, AgentConfig> = toml::from_str(DEFAULT_AGENTS).unwrap();
+        assert!(
+            agents["claude"]
+                .args
+                .iter()
+                .any(|argument| argument.contains("Bash(miau ask:*)"))
+        );
+    }
+
+    #[test]
     fn embedded_workflow_shares_one_session_per_agent() {
         let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
         let groups: Vec<_> = workflow

@@ -3,8 +3,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use miau::{
     execution::{
         application::Request,
-        domain::EventKind,
-        infrastructure::{ConfiguredAdapter, spawn},
+        domain::{EventKind, operator::summary as operator_request_summary},
+        infrastructure::{ConfiguredAdapter, operator, spawn},
     },
     runs::{
         application::{ArtifactRepository, RunRepository},
@@ -44,6 +44,33 @@ enum Commands {
     Debug(DebugArgs),
     /// Generate architecture diagrams from source, without an agent.
     Diagram(DiagramArgs),
+    /// For agents: ask the operator to run a command, wait, and return its output and exit code.
+    Ask(AskArgs),
+    /// For the operator: list, run, or refuse the commands an agent asked for.
+    Op(OpArgs),
+}
+#[derive(Args)]
+struct AskArgs {
+    /// Seconds to wait for the operator before giving up.
+    #[arg(long, default_value_t = 540)]
+    timeout: u64,
+    /// Request directory; defaults to the one miau set for this agent.
+    #[arg(long)]
+    dir: Option<PathBuf>,
+    /// The command and its arguments, executed without a shell.
+    #[arg(last = true, required = true)]
+    command: Vec<String>,
+}
+#[derive(Args)]
+struct OpArgs {
+    /// Number of the request to run; omit to list pending requests.
+    id: Option<u32>,
+    /// Refuse the request instead of running it, with an optional reason for the agent.
+    #[arg(long, num_args = 0..=1, default_missing_value = "no reason given", requires = "id")]
+    deny: Option<String>,
+    /// Request directory; defaults to the one miau set for this shell.
+    #[arg(long)]
+    dir: Option<PathBuf>,
 }
 #[derive(Args)]
 struct DiagramArgs {
@@ -117,6 +144,17 @@ async fn main() -> Result<()> {
         Some(Commands::Diagram(args)) => match args.command {
             DiagramCommands::Typescript(args) => generate_typescript(args),
         },
+        Some(Commands::Ask(args)) => {
+            let code = operator::ask(
+                args.dir,
+                args.command,
+                std::time::Duration::from_secs(args.timeout),
+                &mut io::stdout().lock(),
+            )
+            .await?;
+            std::process::exit(code)
+        }
+        Some(Commands::Op(args)) => answer_operator_request(args).await,
         Some(Commands::Debug(args)) => match args.command {
             DebugCommands::Run(request) => {
                 let agents = match cli.agents {
@@ -137,6 +175,33 @@ async fn main() -> Result<()> {
             .await
         }
     }
+}
+
+async fn answer_operator_request(args: OpArgs) -> Result<()> {
+    let mut output = io::stdout().lock();
+    let Some(id) = args.id else {
+        let pending = operator::pending(args.dir)?;
+        if pending.is_empty() {
+            writeln!(output, "miau: no agent request is waiting.")?;
+        }
+        for request in pending {
+            writeln!(output, "{}", operator_request_summary(&request))?;
+        }
+        return Ok(());
+    };
+    if let Some(reason) = args.deny {
+        operator::deny(args.dir, id, reason)?;
+        writeln!(output, "miau: request {id} refused; the agent was told.")?;
+        return Ok(());
+    }
+    drop(output);
+    let code = operator::run(args.dir, id).await?;
+    let result = code.map_or_else(|| "a signal".to_owned(), |code| format!("exit code {code}"));
+    writeln!(
+        io::stdout().lock(),
+        "miau: request {id} ended with {result}; the agent received the output."
+    )?;
+    Ok(())
 }
 
 fn generate_typescript(args: TypeScriptArgs) -> Result<()> {
@@ -317,6 +382,7 @@ async fn debug_run(
             cwd: args.cwd,
             resume: None,
             schema: args.schema,
+            env: vec![],
         },
         &log,
     )

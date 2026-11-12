@@ -49,6 +49,17 @@ on disk. Submission re-reads the artifact and requires review if questions have
 changed since display. The versioned feedback file preserves submitted questions
 and answers before the agent starts. No transcript forwarding is involved.
 
+Operator requests let a running agent ask the human to run a command that needs a privilege the agent lacks, such as
+`sudo`. The request, outcome, and display quoting are `execution/domain/operator` types; the `OperatorRequests` port
+and the `receive` use case live in the execution application layer. Infrastructure stores each request and outcome as
+files in the run's `requests/` directory. The agent side (`miau ask`) only writes one line to the `requests/inbox`
+named pipe and only reads files, because an agent sandbox may forbid file writes (the Codex read-only sandbox does).
+The miau that started the agent owns the pipe for the lifetime of that agent, assigns request numbers, and withdraws
+unanswered requests when the agent ends. The operator side (`miau op`) runs the command on the operator's terminal and
+writes the outcome atomically; the asking process polls for it. The terminal context only displays waiting requests
+and passes the directory to the `!` shell. No request is ever run without the operator typing its command line, the
+outcome goes only to the asking process, and nothing here approves or advances a workflow step.
+
 Workflow nodes may opt into a named session group. At process start, the
 orchestrator selects only the newest captured session from an earlier node with
 the same group and configured agent. The session ID remains part of persisted

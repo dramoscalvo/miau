@@ -25,6 +25,9 @@ on a full output pipe. It never polls terminal input during the handoff, so the 
 Interactive shells move themselves into their own process group, so Ctrl+C at the shell prompt does not reach miau
 or the agent.
 
+`miau op` runs in that shell, outside the TUI process, so a requested command and its `sudo` prompt never share the
+terminal with raw mode. The TUI only reads request files on its tick and rings the bell for a new request.
+
 Restoration must run when child creation or waiting returns an error. The panic
 hook in `main.rs` must restore stdio before printing the panic report. Never add
 a blocking child wait to the asynchronous TUI loop; editor and discussion

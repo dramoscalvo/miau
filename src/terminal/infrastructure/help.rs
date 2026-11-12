@@ -1,6 +1,7 @@
 //! Context-sensitive help view.
 
 use crate::{
+    execution::domain::operator::{OperatorRequest, command_line},
     runs::domain::NodeStatus,
     terminal::application::{
         Action, DetailView, Mode, PromptEditMode, PromptKind, prompt_cursor_position, prompt_rows,
@@ -30,6 +31,28 @@ fn hint_line(text: &str) -> Line<'static> {
         }
     }
     Line::from(spans)
+}
+
+/// One-line notice shown while the agent waits for the operator to run a command.
+pub fn operator_request_text(requests: &[OperatorRequest]) -> Option<String> {
+    let first = requests.first()?;
+    let more = match requests.len() - 1 {
+        0 => String::new(),
+        count => format!(" (+{count} more)"),
+    };
+    Some(format!(
+        "agent waits{more} · press ! then type `miau op {}` to run: {}",
+        first.id,
+        command_line(&first.argv)
+    ))
+}
+
+pub fn render_operator_request(frame: &mut Frame<'_>, area: Rect, notice: &str) {
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(Line::from(notice.to_owned().yellow().bold())).wrap(Wrap { trim: true }),
+        area,
+    );
 }
 
 fn confirmation_text(action: &Action) -> &'static str {
@@ -333,6 +356,22 @@ mod tests {
         Action, DetailView, Mode, PromptEditMode, PromptKind, prompt_rows,
     };
     use ratatui::{Terminal, backend::TestBackend, style::Color};
+
+    #[test]
+    fn a_waiting_agent_request_names_the_command_line_that_runs_it() {
+        let request = |id, program: &str| crate::execution::domain::operator::OperatorRequest {
+            id,
+            token: format!("t{id}"),
+            argv: vec!["sudo".into(), program.into()],
+            cwd: "/work".into(),
+            cancelled: false,
+        };
+        assert_eq!(super::operator_request_text(&[]), None);
+        assert_eq!(
+            super::operator_request_text(&[request(3, "docker"), request(4, "true")]).as_deref(),
+            Some("agent waits (+1 more) · press ! then type `miau op 3` to run: sudo docker")
+        );
+    }
 
     fn gate_view() -> super::HelpView<'static> {
         super::HelpView {

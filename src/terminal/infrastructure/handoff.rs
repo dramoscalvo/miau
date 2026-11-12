@@ -3,7 +3,13 @@
 //! The TUI never enables mouse capture, so the terminal keeps its native text
 //! selection and copy behaviour.
 
-use crate::execution::{domain::Event, infrastructure::RunningAgent};
+use crate::execution::{
+    domain::{
+        Event,
+        operator::{OperatorRequest, summary},
+    },
+    infrastructure::{RunningAgent, operator::DIR_ENV},
+};
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
@@ -62,6 +68,7 @@ pub fn spawn_shell(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     cwd: &Path,
     agent_running: bool,
+    operator: Option<(&Path, &[OperatorRequest])>,
 ) -> io::Result<tokio::process::Child> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".into());
     let agent = if agent_running {
@@ -76,13 +83,37 @@ pub fn spawn_shell(
             cwd.display()
         ))
     )?;
-    tokio::process::Command::new(shell)
+    let mut command = tokio::process::Command::new(shell);
+    if let Some((directory, requests)) = operator {
+        execute!(
+            terminal.backend_mut(),
+            Print(operator_notice(requests).replace('\n', "\r\n"))
+        )?;
+        command.env(DIR_ENV, directory);
+    }
+    command
         .current_dir(cwd)
         .env("MIAU_SHELL", "1")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
+}
+
+/// What the shell banner says about commands the agent asked for.
+pub fn operator_notice(requests: &[OperatorRequest]) -> String {
+    if requests.is_empty() {
+        return "miau: no agent request is waiting. `miau op` lists requests that arrive later.\n"
+            .into();
+    }
+    let mut notice = String::from(
+        "miau: the agent waits for you to run these commands. Read each one before you run it.\n",
+    );
+    for request in requests {
+        notice.push_str(&summary(request));
+        notice.push('\n');
+    }
+    notice
 }
 
 #[derive(Debug)]
@@ -125,13 +156,28 @@ pub fn restore_stdio() {
 
 #[cfg(test)]
 mod tests {
-    use super::{ShellWait, next_shell_wait};
+    use super::{ShellWait, next_shell_wait, operator_notice};
     use crate::execution::{
         application::Request,
-        domain::EventKind,
+        domain::{EventKind, operator::OperatorRequest},
         infrastructure::{ShellAdapter, spawn},
     };
     use std::time::Duration;
+
+    #[test]
+    fn the_shell_banner_lists_each_waiting_request_with_its_command_line() {
+        let request = |id| OperatorRequest {
+            id,
+            token: format!("t{id}"),
+            argv: vec!["sudo".into(), "true".into()],
+            cwd: "/work".into(),
+            cancelled: false,
+        };
+        let notice = operator_notice(&[request(1), request(2)]);
+        assert!(notice.contains("[1] sudo true") && notice.contains("miau op 1"));
+        assert!(notice.contains("[2] sudo true") && notice.contains("miau op 2"));
+        assert!(operator_notice(&[]).contains("no agent request is waiting"));
+    }
 
     #[tokio::test]
     async fn shell_wait_delivers_agent_events_before_the_shell_exits() {
@@ -141,6 +187,7 @@ mod tests {
             cwd: ".".into(),
             resume: None,
             schema: None,
+            env: vec![],
         };
         let mut running = Some(
             spawn(

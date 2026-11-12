@@ -15,7 +15,7 @@ includes Claude Code and Codex examples:
 [claude]
 bin = "claude"
 effort = "high"
-args = ["--model", "claude-opus-5-5", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(ls:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(echo:*) Bash(pnpm test:*) Bash(pnpm test:unit:*) Bash(pnpm test:integration:*) Bash(pnpm test:e2e:*) Bash(pnpm test:file:*) Bash(pnpm lint:*) Bash(pnpm lint:server:*) Bash(pnpm tsc:*) Bash(pnpm prettier:*) Bash(pnpm style:fix:*) Bash(pnpm build:*) Bash(pnpm quality:local:*) Bash(pnpm coverage:unit:*) Bash(pnpm coverage:gate:*) Bash(pnpm crap:*) Bash(pnpm crap:coverage:*) Bash(pnpm crap:report:*) Bash(pnpm crap:check:*) Bash(pnpm dry:*) Bash(pnpm mutation:*) Bash(pnpm mutation:changed:*) Bash(node --run:*) Bash(npx jest:*) Bash(npx tsc:*) Bash(npx eslint:*) Bash(npx stylelint:*) Bash(pnpm stylelint:*) Bash(.venv/bin/pytest:*) Bash(.venv/bin/python -m pytest:*) Bash(.venv/bin/dagster definitions validate:*) Bash(pytest:*) Bash(python3 -m py_compile:*) Bash(docker compose -f /home/david/Work/odoo/docker-compose.yml run --rm odoo odoo -d test:*) Bash(rsync -a --delete --exclude=__pycache__ /home/david/Work/sn-odoo/:*)", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
+args = ["--model", "claude-opus-5-5", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(ls:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(echo:*) Bash(miau ask:*) Bash(pnpm test:*) Bash(pnpm test:unit:*) Bash(pnpm test:integration:*) Bash(pnpm test:e2e:*) Bash(pnpm test:file:*) Bash(pnpm lint:*) Bash(pnpm lint:server:*) Bash(pnpm tsc:*) Bash(pnpm prettier:*) Bash(pnpm style:fix:*) Bash(pnpm build:*) Bash(pnpm quality:local:*) Bash(pnpm coverage:unit:*) Bash(pnpm coverage:gate:*) Bash(pnpm crap:*) Bash(pnpm crap:coverage:*) Bash(pnpm crap:report:*) Bash(pnpm crap:check:*) Bash(pnpm dry:*) Bash(pnpm mutation:*) Bash(pnpm mutation:changed:*) Bash(node --run:*) Bash(npx jest:*) Bash(npx tsc:*) Bash(npx eslint:*) Bash(npx stylelint:*) Bash(pnpm stylelint:*) Bash(.venv/bin/pytest:*) Bash(.venv/bin/python -m pytest:*) Bash(.venv/bin/dagster definitions validate:*) Bash(pytest:*) Bash(python3 -m py_compile:*) Bash(docker compose -f /home/david/Work/odoo/docker-compose.yml run --rm odoo odoo -d test:*) Bash(rsync -a --delete --exclude=__pycache__ /home/david/Work/sn-odoo/:*)", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"]
 resume_args = ["--resume", "{session}"]
 discuss_args = ["--resume", "{session}"]
 parser = "claude"
@@ -53,6 +53,12 @@ A `Bash(pnpm test:*)` entry matches `pnpm test` and its arguments only; it does 
 `pnpm test:unit`. The bundled allowlist therefore names `pnpm test:unit`, `pnpm test:integration`, `pnpm test:e2e`,
 `pnpm test:file`, and `pnpm lint:server` explicitly. These entries also permit `cd <project> && pnpm test:unit` when
 miau starts in a directory that contains several projects.
+
+`Bash(miau ask:*)` lets Claude ask the operator to run a command that needs `sudo` or another privilege; see
+[Commands the agent asks you to run](usage.md#commands-the-agent-asks-you-to-run). The entry permits only the request:
+the operator still reads and runs each command. Codex needs no entry, because `miau ask` works inside its read-only
+sandbox. miau sets `MIAU_OPERATOR_DIR` for the agent process and for the `!` shell; an agent CLI that removes
+environment variables from its tools must keep this one. `miau` must be on the agent's `PATH`.
 
 Existing installations retain their configuration. Add the corresponding `Bash(pnpm <script>:*)` entries to Claude's
 `--allowedTools` argument in your installed `agents.toml`, then restart miau to load the updated permissions.

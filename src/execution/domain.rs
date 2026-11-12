@@ -1,5 +1,7 @@
 //! Agent-independent execution events.
 
+pub mod operator;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

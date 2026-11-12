@@ -1,5 +1,6 @@
 mod claude;
 mod codex;
+pub mod operator;
 
 use crate::execution::{
     application::{AgentAdapter, AgentConfig, CommandSpec, Request},
@@ -191,7 +192,10 @@ pub async fn spawn<A: AgentAdapter>(
     }
     let spec = adapter.command(&req);
     let mut command = Command::new(spec.bin);
-    command.args(spec.args).current_dir(spec.cwd);
+    command
+        .args(spec.args)
+        .current_dir(spec.cwd)
+        .envs(req.env.iter().cloned());
     command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -340,6 +344,7 @@ mod tests {
             cwd: ".".into(),
             resume: Some("thread-1".into()),
             schema: Some("schema.json".into()),
+            env: vec![],
         });
         assert_eq!(
             command.args,
@@ -368,6 +373,7 @@ mod tests {
             cwd: ".".into(),
             resume: None,
             schema: None,
+            env: vec![],
         });
 
         assert!(
@@ -385,6 +391,7 @@ mod tests {
             cwd: ".".into(),
             resume: None,
             schema: None,
+            env: vec![],
         };
         let mut running = spawn(
             ShellAdapter::new("test", vec!["sh".into(), "-c".into(), "sleep 30".into()]),

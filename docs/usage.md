@@ -207,6 +207,39 @@ agent only sees changes to shared state such as files or cached sudo credentials
 `sudo` ticket depends on your sudoers `timestamp_type`; the default per-terminal ticket applies because the agent runs
 on the same terminal. The shell's exit status is ignored.
 
+### Commands the agent asks you to run
+
+An agent has no terminal, so it cannot answer a `sudo` password prompt, and the Codex sandbox forbids `sudo` entirely.
+When a step needs such a command, for example `sudo docker compose up -d`, the agent calls `miau ask -- <command>` and
+waits. miau rings the terminal bell and replaces the key hints with a yellow notice:
+
+```text
+agent waits · press ! then type `miau op 1` to run: sudo docker compose up -d
+```
+
+Press `!`. The shell banner shows every waiting request in full, with its working directory and the command lines that
+answer it. Read the command, then answer it yourself:
+
+| You type | Result |
+| --- | --- |
+| `miau op` | Lists the waiting requests. |
+| `miau op 1` | Runs request 1 on your terminal, so `sudo` can ask for your password. |
+| `miau op 1 --deny "reason"` | Refuses request 1. Nothing runs, and the agent receives the reason. |
+
+`miau op 1` shows the command's output, saves it as `requests/1.log` in the run directory, and gives the output and the
+exit code to the waiting agent, which then continues its step. Type `exit` to return to miau. miau never runs a
+requested command by itself, and a request can be answered only once.
+
+The command line is shown with shell quoting, and control characters are escaped, so the text you read is the command
+that runs. The arguments are executed directly, without a shell. A command with pipes or redirection therefore appears
+as an explicit `sh -c '...'` request. Standard input stays connected to your terminal; standard output and standard
+error pass through miau so that they can be saved, so a program that requires a terminal on its output may behave
+differently.
+
+The agent waits up to 9 minutes by default. After that, or when the agent stops, the request is withdrawn and `miau op`
+refuses it; the agent then reports the command as not run and records an open decision. Press Ctrl+C during
+`miau op 1` to interrupt the command: the agent still receives the partial output.
+
 In UML class diagrams, `j`/`k` selects a class, `}` selects a relationship, Enter follows it, and Backspace returns.
 Press `Esc` to return to the complete document view. Use uppercase `H`/`J`/`K`/`L` to pan and Home to reset. Left/Right keeps Diagram open while browsing the planning and
 implementation steps, preserving the selected type when its stable ID exists in both artifacts. Press `p` or `r` to

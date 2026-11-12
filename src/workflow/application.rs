@@ -505,6 +505,10 @@ mod tests {
                             .contains("Run commands in the foreground and wait for them to finish"),
                         "{role}/{agent}: missing foreground command rule"
                     );
+                    assert!(
+                        prompt.contains("miau ask -- <command> [arguments...]"),
+                        "{role}/{agent}: missing operator request rule"
+                    );
                     for section in [
                         "## Objective",
                         "## Scope",

@@ -14,7 +14,9 @@ fn inner_layers_do_not_depend_on_infrastructure() {
         source.join("runs/domain.rs"),
         source.join("runs/domain/diagram.rs"),
         source.join("execution/application.rs"),
+        source.join("execution/application/operator.rs"),
         source.join("execution/domain.rs"),
+        source.join("execution/domain/operator.rs"),
         source.join("workflow/application.rs"),
         source.join("workflow/application/decisions.rs"),
         source.join("workflow/domain.rs"),
@@ -41,6 +43,7 @@ fn domain_layers_do_not_depend_on_application_layers() {
         source.join("runs/domain.rs"),
         source.join("runs/domain/diagram.rs"),
         source.join("execution/domain.rs"),
+        source.join("execution/domain/operator.rs"),
         source.join("workflow/domain.rs"),
     ];
 

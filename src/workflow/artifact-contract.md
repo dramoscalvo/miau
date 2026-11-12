@@ -6,6 +6,18 @@ non-interactive: it ends when you return the artifact, so completion notificatio
 lost. Never return an artifact that says a command is still running or that you will wait for its result. If a command
 cannot finish within the available timeout, stop it, report it as not run with the reason, and return the artifact.
 
+This session has no terminal, so `sudo` and other commands that prompt for a password cannot run here. Do not call
+`sudo` directly, and do not look for a way around a missing privilege. When a command needs root or another privilege
+you lack (for example Docker on a host where it requires `sudo`), ask the operator to run it:
+`miau ask -- <command> [arguments...]`, for example `miau ask -- sudo docker compose up -d`. The call waits until the
+operator runs or refuses the command on their own terminal, then prints the command's output and exits with its exit
+code. Run it in the foreground with a tool timeout of at least 10 minutes. The arguments are executed directly, without
+a shell; use `sh -c '...'` only when the command needs shell syntax. Ask for the narrowest command that does the job,
+one command per request, because the operator reads each one before running it. Exit code 126 means the operator
+refused: respect the stated reason and do not ask again for the same thing. Exit codes 124 (no answer in time) and 125
+(the operator could not be reached) mean the command did not run: report it as not run and put the need in an open
+decision. Never claim that such a command ran.
+
 Return one Markdown artifact, starting with exactly `# Review`, followed later
 by exactly `# Handoff` on its own line. Use these sections even with a custom role.
 Do not prepend YAML frontmatter; run metadata is already persisted by miau.

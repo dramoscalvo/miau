@@ -15,8 +15,12 @@ mod sources;
 use crate::{
     execution::{
         application::{AgentConfig, Request},
-        domain::{Event, EventKind},
-        infrastructure::{ConfiguredAdapter, RunningAgent, ShellAdapter, spawn},
+        domain::{Event, EventKind, operator::OperatorRequest},
+        infrastructure::{
+            ConfiguredAdapter, RunningAgent, ShellAdapter,
+            operator::{DIR_ENV, OperatorInbox},
+            spawn,
+        },
     },
     runs::{
         application::{ArtifactRepository, RunRepository, diagram_notes::Notes},
@@ -43,6 +47,7 @@ use crossterm::{
         KeyModifiers,
     },
     execute,
+    style::Print,
     terminal::{EnterAlternateScreen, enable_raw_mode},
 };
 use futures_util::StreamExt;
@@ -75,6 +80,8 @@ struct App {
     working_tree_error: Option<String>,
     working_tree: GitWorkingTree,
     running: Option<RunningAgent>,
+    inbox: Option<OperatorInbox>,
+    operator_requests: Vec<OperatorRequest>,
     started: Option<Instant>,
     agents: HashMap<String, AgentConfig>,
     workflow: WorkflowConfig,
@@ -385,6 +392,8 @@ impl App {
             working_tree_error: None,
             working_tree: GitWorkingTree,
             running: None,
+            inbox: None,
+            operator_requests: vec![],
             started: None,
             agents: load_agents(&config.agents)?,
             workflow: load_workflow(&config.workflow)?,
@@ -781,7 +790,7 @@ impl App {
         }
         self.orchestrator.begin(run)?;
         self.ui.viewed_node = run.cursor;
-        let request = Request {
+        let mut request = Request {
             prompt: if node.command.is_none() {
                 self.orchestrator
                     .assemble_prompt(run, pending_prompt.as_deref())?
@@ -791,13 +800,31 @@ impl App {
             cwd: run.project.clone(),
             resume,
             schema: None,
+            env: vec![],
         };
         let raw_log = self
             .repository
             .run_dir(&run.id)
             .join("events")
             .join(format!("{}.jsonl", node.name));
+        let operator_dir = std::path::absolute(self.repository.run_dir(&run.id).join("requests"))?;
         self.stream.clear();
+        self.operator_requests.clear();
+        self.inbox = match OperatorInbox::open(&operator_dir) {
+            Ok(inbox) => {
+                request.env = vec![(
+                    DIR_ENV.to_owned(),
+                    operator_dir.to_string_lossy().into_owned(),
+                )];
+                Some(inbox)
+            }
+            Err(error) => {
+                // The agent still runs; its `miau ask` calls report that no operator is reachable.
+                self.stream
+                    .push(format!("operator requests are unavailable: {error}"));
+                None
+            }
+        };
         self.agent_activity = "starting".into();
         self.ui.error = None;
         self.started = Some(Instant::now());
@@ -890,7 +917,25 @@ impl App {
             }
         }
         self.running = None;
+        self.close_inbox();
         Ok(())
+    }
+
+    /// Stops listening once no agent can receive an answer.
+    fn close_inbox(&mut self) {
+        self.inbox = None;
+        self.operator_requests.clear();
+    }
+
+    /// Reloads waiting requests from disk and reports whether a new one arrived.
+    fn refresh_operator_requests(&mut self) -> bool {
+        let Some(Ok(pending)) = self.inbox.as_ref().map(OperatorInbox::pending) else {
+            return false;
+        };
+        let newest = |requests: &[OperatorRequest]| requests.last().map(|request| request.id);
+        let has_new = newest(&pending) > newest(&self.operator_requests);
+        self.operator_requests = pending;
+        has_new
     }
 
     async fn key(
@@ -1280,6 +1325,7 @@ impl App {
             return Ok(());
         };
         let _ = running.kill();
+        self.close_inbox();
         let agent = self
             .run
             .as_ref()
@@ -1429,9 +1475,14 @@ impl App {
             None => std::env::current_dir()?,
         };
         let mut failure = None;
-        let status = match handoff::suspend(terminal)
-            .and_then(|()| handoff::spawn_shell(terminal, &cwd, self.running.is_some()))
-        {
+        self.refresh_operator_requests();
+        let status = match handoff::suspend(terminal).and_then(|()| {
+            let operator = self
+                .inbox
+                .as_ref()
+                .map(|inbox| (inbox.directory(), self.operator_requests.as_slice()));
+            handoff::spawn_shell(terminal, &cwd, self.running.is_some(), operator)
+        }) {
             Ok(mut child) => loop {
                 match handoff::next_shell_wait(&mut child, &mut self.running).await {
                     handoff::ShellWait::Exited(status) => break status,
@@ -1448,6 +1499,7 @@ impl App {
             Err(error) => Err(error),
         };
         let restored = handoff::restore(terminal);
+        self.refresh_operator_requests();
         if self.run.is_some() {
             self.reload_artifact()?;
             self.refresh_working_tree_if_visible();
@@ -1513,7 +1565,13 @@ async fn event_loop(
                 _ => {}
             } },
             event = next_agent_event(&mut app.running) => match event { Some(event) => app.accept_event(event)?, None => app.stream_closed()? },
-            _ = tick.tick() => app.ui.update(Message::Tick),
+            _ = tick.tick() => {
+                app.ui.update(Message::Tick);
+                // The bell tells an operator who looks elsewhere that the agent waits.
+                if app.ui.spinner == 0 && app.refresh_operator_requests() {
+                    execute!(terminal.backend_mut(), Print('\u{7}'))?;
+                }
+            },
         }
     }
     Ok(())
@@ -1632,6 +1690,12 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
         show_cursor: !app.ui.help_open,
     };
     help::render(frame, areas.help, &help_view);
+    if matches!(app.ui.mode, Mode::Streaming)
+        && help_view.error.is_none()
+        && let Some(notice) = help::operator_request_text(&app.operator_requests)
+    {
+        help::render_operator_request(frame, areas.help, &notice);
+    }
     if let Some(draft) = &app.ui.run_title_draft
         && matches!(app.ui.mode, Mode::RunList)
     {

@@ -1,5 +1,7 @@
 //! Execution requests and outbound agent-adapter port.
 
+pub mod operator;
+
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -55,6 +57,8 @@ pub struct Request {
     pub cwd: PathBuf,
     pub resume: Option<String>,
     pub schema: Option<PathBuf>,
+    /// Extra environment variables for the started process.
+    pub env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
