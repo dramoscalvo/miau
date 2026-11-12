@@ -221,6 +221,22 @@ mod tests {
     }
 
     #[test]
+    fn embedded_claude_allows_project_local_binaries() {
+        let agents: HashMap<String, AgentConfig> = toml::from_str(DEFAULT_AGENTS).unwrap();
+        let args = &agents["claude"].args;
+        let allowlist = &args[args.iter().position(|arg| arg == "--allowedTools").unwrap() + 1];
+        // A workspace package calls the binaries of the root project through `../`.
+        for directory in ["./node_modules/.bin", "../node_modules/.bin"] {
+            for binary in ["tsc", "prettier", "eslint"] {
+                assert!(
+                    allowlist.contains(&format!("Bash({directory}/{binary}:*)")),
+                    "missing permission for {directory}/{binary}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn embedded_claude_may_ask_the_operator_to_run_a_command() {
         let agents: HashMap<String, AgentConfig> = toml::from_str(DEFAULT_AGENTS).unwrap();
         assert!(
