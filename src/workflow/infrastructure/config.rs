@@ -248,6 +248,17 @@ mod tests {
     }
 
     #[test]
+    fn embedded_codex_discussion_runs_without_the_shared_daemon() {
+        let agents: HashMap<String, AgentConfig> = toml::from_str(DEFAULT_AGENTS).unwrap();
+        // The shared Codex daemon keeps a discussed session open for 60 seconds after the
+        // discussion closes. A resume in that time fails with "already has an active writer".
+        assert_eq!(
+            agents["codex"].discuss_args,
+            ["resume", "{session}", "--no-daemon"]
+        );
+    }
+
+    #[test]
     fn embedded_workflow_shares_one_session_per_agent() {
         let workflow: WorkflowConfig = toml::from_str(DEFAULT_WORKFLOW).unwrap();
         let groups: Vec<_> = workflow

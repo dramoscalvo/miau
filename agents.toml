@@ -13,5 +13,5 @@ args = ["exec", "--json", "--model", "gpt-6.2-sol", "-c", "model_reasoning_effor
 resume_args = ["resume", "{session}"]
 resume_insert_at = 1
 schema_args = ["--output-schema", "{schema}"]
-discuss_args = ["resume", "{session}"]
+discuss_args = ["resume", "{session}", "--no-daemon"]
 parser = "codex"

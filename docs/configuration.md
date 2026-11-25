@@ -27,7 +27,7 @@ args = ["exec", "--json", "--model", "gpt-6-sol", "-c", "model_reasoning_effort=
 resume_args = ["resume", "{session}"]
 resume_insert_at = 1
 schema_args = ["--output-schema", "{schema}"]
-discuss_args = ["resume", "{session}"]
+discuss_args = ["resume", "{session}", "--no-daemon"]
 parser = "codex"
 ```
 
@@ -65,8 +65,15 @@ the operator still reads and runs each command. Codex needs no entry, because `m
 sandbox. miau sets `MIAU_OPERATOR_DIR` for the agent process and for the `!` shell; an agent CLI that removes
 environment variables from its tools must keep this one. `miau` must be on the agent's `PATH`.
 
+Codex's `discuss_args` include `--no-daemon`. Without it, the interactive session attaches to the shared Codex
+background server, which keeps the session open for 60 seconds after the discussion closes. A step that resumes
+the session in that time fails with `thread <id> already has an active writer`, so the update request after
+a discussion and each retry fail until the server releases the session. With `--no-daemon` the session closes
+when the discussion exits.
+
 Existing installations retain their configuration. Add the corresponding `Bash(<command>:*)` entries to Claude's
-`--allowedTools` argument in your installed `agents.toml`, then restart miau to load the updated permissions.
+`--allowedTools` argument in your installed `agents.toml`, then restart miau to load the updated permissions. Also
+add `--no-daemon` to Codex's `discuss_args` there.
 
 ## Configure the workflow
 
